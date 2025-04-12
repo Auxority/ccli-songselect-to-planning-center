@@ -2,8 +2,13 @@
 // @name        Download CCLI ChordPro for PlanningCenter
 // @namespace   Violentmonkey Scripts
 // @match       https://songselect.ccli.com/*
+// @match       https://services.planningcenteronline.com/*
 // @grant       GM_setClipboard
-// @version     v1.0.0
+// @grant       GM_getValue
+// @grant       GM_setValue
+// @grant       GM_xmlhttpRequest
+// @grant       GM_registerMenuCommand
+// @version     1.0.0
 // @author      aux
 // @description 3/28/2025, 5:07:30 PM
 // ==/UserScript==
@@ -33,22 +38,22 @@ class SongFinder {
   static async getSongDetails() {
     const songId = SongFinder.getSongId();
     const defaultKey = DefaultKeyFinder.find();
-  
+
     return new SongDetails(songId, defaultKey);
   }
 
   static getSongId() {
     const rawId = SongFinder.getRawSongId();
-  
+
     return IntegerParser.parse(rawId);
   }
 
-  static getRawSongId() { 
+  static getRawSongId() {
     const parts = location.pathname.split(SongFinder.PATHNAME_SEPARATOR);
     if (parts.length !== SongFinder.EXPECTED_PART_COUNT) {
       throw new Error(`Actual pathname part count ${parts.length} does not match expected part count of ${SongFinder.EXPECTED_PART_COUNT}`);
     }
-  
+
     return parts[2];
   }
 }
@@ -67,13 +72,13 @@ class DefaultKeyFinder {
       console.warn("Could not find the key selector");
       return;
     }
-  
+
     const allOptions = keySelector.querySelectorAll("option");
     const defaultKey = [...allOptions].find(DefaultKeyFinder.isDefaultKey)?.value;
     if (defaultKey === undefined) {
       throw new Error("Could not find the default key on the page");
     }
-  
+
     return defaultKey;
   }
 
@@ -118,7 +123,7 @@ class ChordProParser {
     const modifiedSections = sections.slice(1, -1);
     const songText = modifiedSections.join(ChordProParser.SECTION_DELIMITER);
 
-    // Converts section headers to PlanningCenter's format
+    // Converts section headers to PlanningCenter"s format
     const formattedComments = songText.replace(/\{comment: (.*?)\}/g, "<b>$1</b>\n");
 
     // Ensure spacing between adjacent chord brackets
@@ -143,12 +148,12 @@ class ChordProAPI {
     const url = ChordProAPI.buildURL(songDetails);
     const res = await fetch(url);
     const data = await res.json();
-  
+
     const payload = data.payload;
     if (payload === undefined || payload === "") {
       throw new Error(`Missing Chord Pro payload in response data: ${data}`);
     }
-  
+
     return payload.trimStart();
   }
 
@@ -179,6 +184,218 @@ class ChordProAPI {
   }
 }
 
+class TokenStorage {
+  static saveToken(tokenData) {
+    GM_setValue("access_token", tokenData.access_token);
+    GM_setValue("refresh_token", tokenData.refresh_token);
+    GM_setValue("expires_at", Date.now() + tokenData.expires_in * 1000);
+  }
+
+  static get accessToken() {
+    return GM_getValue("access_token", null);
+  }
+
+  static get refreshToken() {
+    return GM_getValue("refresh_token", null);
+  }
+
+  static get isTokenValid() {
+    const expiresAt = Number(GM_getValue("expires_at", 0));
+    return Date.now() < expiresAt;
+  }
+
+  static get clientId() {
+    return GM_getValue("client_id", null);
+  }
+
+  static get clientSecret() {
+    return GM_getValue("client_secret", null);
+  }
+
+  static async promptForCredentials() {
+    const id = prompt("Enter your Planning Center CLIENT ID:");
+    const secret = prompt("Enter your Planning Center CLIENT SECRET:");
+    if (id && secret) {
+      GM_setValue("client_id", id.trim());
+      GM_setValue("client_secret", secret.trim());
+      alert("✅ Credentials saved.");
+    } else {
+      alert("❌ Client ID and secret are required.");
+    }
+  }
+
+  static get hasCredentials() {
+    return this.clientId && this.clientSecret;
+  }
+}
+
+class OAuthClient {
+  static CONFIG = {
+    REDIRECT_URI: "https://services.planningcenteronline.com/dashboard/0",
+    AUTH_URL: "https://api.planningcenteronline.com/oauth/authorize",
+    TOKEN_URL: "https://api.planningcenteronline.com/oauth/token",
+    SCOPE: "people",
+  };
+
+  constructor() {
+  }
+
+  getAuthUrl() {
+    const state = Math.random().toString(36).substring(2);
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: TokenStorage.clientId,
+      redirect_uri: OAuthClient.CONFIG.REDIRECT_URI,
+      scope: OAuthClient.CONFIG.SCOPE,
+      state,
+    });
+
+    return `${OAuthClient.CONFIG.AUTH_URL}?${params.toString()}`;
+  }
+
+  exchangeCodeForToken(code) {
+    const authHeader = btoa(`${TokenStorage.clientId}:${TokenStorage.clientSecret}`);
+
+    GM_xmlhttpRequest({
+      method: "POST",
+      url: OAuthClient.CONFIG.TOKEN_URL,
+      headers: {
+        "Authorization": `Basic ${authHeader}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      data: new URLSearchParams({
+        grant_type: "authorization_code",
+        code: code,
+        redirect_uri: OAuthClient.CONFIG.REDIRECT_URI,
+      }).toString(),
+      onload: (response) => {
+        if (response.status === 200) {
+          const result = JSON.parse(response.responseText);
+          TokenStorage.saveToken(result);
+
+          if (window.opener) {
+            window.opener.postMessage({
+              type: "oauth_complete",
+              access_token: result.access_token,
+              refresh_token: result.refresh_token,
+              expires_in: result.expires_in
+            }, "*");
+            window.close();
+          } else {
+            alert("✅ Access token received - but not really.");
+          }
+        } else {
+          console.error("Token exchange error:", response);
+          alert("Failed to get access token.");
+        }
+      },
+      onerror: (err) => {
+        console.error("Request failed:", err);
+      }
+    });
+  }
+
+  refreshAccessToken() {
+    const authHeader = btoa(`${TokenStorage.clientId}:${TokenStorage.clientSecret}`);
+    console.info("🔄 Attempting to refresh token...");
+
+    GM_xmlhttpRequest({
+      method: "POST",
+      url: this.config.TOKEN_URL,
+      headers: {
+        "Authorization": `Basic ${authHeader}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      data: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: TokenStorage.refreshToken,
+      }).toString(),
+      onload: (response) => this.handleRefreshResponse(response),
+      onerror: (err) => {
+        console.error("Refresh request failed:", err);
+      }
+    });
+  }
+
+  handleRefreshResponse(response) {
+    if (response.status === 200) {
+      const result = JSON.parse(response.responseText);
+      TokenStorage.saveToken(result);
+      console.info("✅ Token refreshed successfully.");
+    } else {
+      console.error("🔁 Token refresh failed:", response);
+      alert("Refresh token is invalid or expired. Please log in again.");
+    }
+  }
+}
+
+class OAuthFlow {
+  constructor() {
+    this.client = new OAuthClient();
+  }
+
+  async init() {
+    if (!TokenStorage.hasCredentials) {
+      await TokenStorage.promptForCredentials();
+    }
+
+    console.debug(`Window location: ${window.location.href}`);
+
+    if (window.location.href.startsWith(OAuthClient.CONFIG.REDIRECT_URI)) {
+      this._handleRedirect();
+    } else {
+      this._setupMessageListener();
+      this._checkTokenStatus();
+      GM_registerMenuCommand("🔐 Log In to Planning Center", () => this.startLogin());
+      GM_registerMenuCommand("⚙️  Set API Credentials", () => TokenStorage.promptForCredentials());
+    }
+  }
+
+  startLogin() {
+    const authUrl = this.client.getAuthUrl();
+    const popup = window.open(authUrl, "oauthPopup", "width=500,height=700,menubar=no,location=no,resizable=yes,scrollbars=yes,status=no");
+    if (!popup || popup.closed || typeof popup.closed === "undefined") {
+      console.error(`Popup blocked! Please allow popups for this site.`);
+      alert("Popup blocked! Please allow popups for this site.");
+    }
+  }
+
+  _handleRedirect() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get("code");
+
+    if (code) {
+      console.debug("Authorization code detected:", code);
+      this.client.exchangeCodeForToken(code);
+    }
+  }
+
+  _setupMessageListener() {
+    window.addEventListener("message", (event) => {
+      if (event.data?.type === "oauth_complete" && event.data.access_token) {
+        TokenStorage.saveToken(event.data);
+        console.debug(event.data);
+        alert("✅ Token received and stored.");
+      }
+    });
+  }
+
+  _checkTokenStatus() {
+    console.debug(`Current access token: ${TokenStorage.accessToken}`);
+    if (TokenStorage.accessToken) {
+      if (TokenStorage.isTokenValid) {
+        console.info("✅ Access token is valid and ready.");
+      } else if (TokenStorage.refreshToken) {
+        this.client.refreshAccessToken();
+      } else {
+        console.warn("⚠️ Token expired and no refresh token found. Please log in again.");
+      }
+    } else {
+      console.info("🔐 No access token found. Use menu to authenticate.");
+    }
+  }
+}
+
 class App {
   /**
    * Used to store songs that have already been downloaded - to prevent the script from unnecessarily calling the API
@@ -193,22 +410,24 @@ class App {
 
   constructor() {
     this.downloadHistory = [];
+    this.flow = new OAuthFlow(this.client);
   }
 
   run() {
-    setInterval(() => this.main(), App.INTERVAL_DELAY);
+    setInterval(() => this.init(), App.INTERVAL_DELAY);
 
-    this.main();
+    this.init();
+    this.flow.init(); // TODO: Move this to a spot after the page check
   }
 
-  async main() {
+  async init() {
     if (!this.isCorrectPage()) {
       console.debug("Incorrect page!");
       return;
     }
-  
+
     const songDetails = await SongFinder.getSongDetails();
-  
+
     if (this.downloadHistory.includes(songDetails.id)) {
       console.debug("Song has already been downloaded!");
       return;
@@ -216,13 +435,13 @@ class App {
 
     console.info(`Song details: ${JSON.stringify(songDetails)}`);
     this.downloadHistory.push(songDetails.id);
-  
+
     const chordProText = await ChordProAPI.fetchChordProText(songDetails);
     console.info(`Chord pro text:\n${chordProText}`);
-  
+
     const result = ChordProParser.parse(chordProText);
     console.info(`Planning Center version:\n${result}`);
-  
+
     alert("Saving the ChordPro file to your clipboard!");
     GM_setClipboard(result);
   }
