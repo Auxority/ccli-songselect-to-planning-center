@@ -10,7 +10,8 @@
 // @grant       GM_registerMenuCommand
 // @version     1.0.0
 // @author      aux
-// @description 3/28/2025, 5:07:30 PM
+// @downloadURL https://github.com/Auxority/ccli-chordpro-to-planning-center/raw/refs/heads/main/index.user.js
+// @updateURL https://github.com/Auxority/ccli-chordpro-to-planning-center/raw/refs/heads/main/index.user.js
 // ==/UserScript==
 
 // TODO: Check if song already exists in PC using CCLI ID.
