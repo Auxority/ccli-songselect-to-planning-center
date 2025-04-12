@@ -13,6 +13,12 @@
 // @description 3/28/2025, 5:07:30 PM
 // ==/UserScript==
 
+// TODO: Check if song already exists in PC using CCLI ID.
+// If not, pull in all info about the song (ID, ChordPro, Default Key, Tempo, etc.)
+// Then add it the song to PC.
+
+// TODO: If authentication fails we could automatically attempt to refresh the token.
+
 class IntegerParser {
   /**
    * Parses a valid finite integer from a string
@@ -404,20 +410,24 @@ class App {
   downloadHistory;
 
   /**
+   * Used to handle PlanningCenter's OAuth2 flow.
+   */
+  authFlow;
+
+  /**
    * Number of ms between checks whether the script should run
    */
   static INTERVAL_DELAY = 1000;
 
   constructor() {
     this.downloadHistory = [];
-    this.flow = new OAuthFlow(this.client);
+    this.authFlow = new OAuthFlow(this.client);
   }
 
   run() {
     setInterval(() => this.init(), App.INTERVAL_DELAY);
 
     this.init();
-    this.flow.init(); // TODO: Move this to a spot after the page check
   }
 
   async init() {
@@ -425,6 +435,8 @@ class App {
       console.debug("Incorrect page!");
       return;
     }
+
+    this.authFlow.init();
 
     const songDetails = await SongFinder.getSongDetails();
 
