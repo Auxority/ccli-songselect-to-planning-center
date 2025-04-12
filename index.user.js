@@ -8,7 +8,7 @@
 // @grant       GM_setValue
 // @grant       GM_xmlhttpRequest
 // @grant       GM_registerMenuCommand
-// @version     1.0.0
+// @version     0.1.0
 // @author      aux
 // @downloadURL https://github.com/Auxority/ccli-chordpro-to-planning-center/raw/refs/heads/main/index.user.js
 // @updateURL https://github.com/Auxority/ccli-chordpro-to-planning-center/raw/refs/heads/main/index.user.js
