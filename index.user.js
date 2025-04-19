@@ -39,7 +39,7 @@ class IntegerParser {
 }
 
 class SongFinder {
-  static EXPECTED_PART_COUNT = 5;
+  static EXPECTED_PART_COUNT = 4;
   static PATHNAME_SEPARATOR = "/";
 
   static async getSongDetails() {
@@ -236,12 +236,36 @@ class TokenStorage {
   }
 }
 
+class GMRequest {
+  /**
+   * Sends a GM_xmlhttpRequest and returns a Promise.
+   * @param {Object} options - Same options as GM_xmlhttpRequest.
+   * @returns {Promise<Object>} - Resolves with the response or rejects on error.
+   */
+  static send(options) {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        ...options,
+        onload: (response) => {
+          if (response.status >= 200 && response.status < 300) {
+            resolve(response);
+          } else {
+            reject(response);
+          }
+        },
+        onerror: reject,
+        ontimeout: reject,
+      });
+    });
+  }
+}
+
 class OAuthClient {
   static CONFIG = {
     REDIRECT_URI: "https://services.planningcenteronline.com/dashboard/0",
     AUTH_URL: "https://api.planningcenteronline.com/oauth/authorize",
     TOKEN_URL: "https://api.planningcenteronline.com/oauth/token",
-    SCOPE: "people",
+    SCOPE: "services",
   };
 
   constructor() {
@@ -260,10 +284,10 @@ class OAuthClient {
     return `${OAuthClient.CONFIG.AUTH_URL}?${params.toString()}`;
   }
 
-  exchangeCodeForToken(code) {
+  async exchangeCodeForToken(code) {
     const authHeader = btoa(`${TokenStorage.clientId}:${TokenStorage.clientSecret}`);
 
-    GM_xmlhttpRequest({
+    const response = await GMRequest.send({
       method: "POST",
       url: OAuthClient.CONFIG.TOKEN_URL,
       headers: {
@@ -275,40 +299,32 @@ class OAuthClient {
         code: code,
         redirect_uri: OAuthClient.CONFIG.REDIRECT_URI,
       }).toString(),
-      onload: (response) => {
-        if (response.status === 200) {
-          const result = JSON.parse(response.responseText);
-          TokenStorage.saveToken(result);
-
-          if (window.opener) {
-            window.opener.postMessage({
-              type: "oauth_complete",
-              access_token: result.access_token,
-              refresh_token: result.refresh_token,
-              expires_in: result.expires_in
-            }, "*");
-            window.close();
-          } else {
-            alert("✅ Access token received - but not really.");
-          }
-        } else {
-          console.error("Token exchange error:", response);
-          alert("Failed to get access token.");
-        }
-      },
-      onerror: (err) => {
-        console.error("Request failed:", err);
-      }
+    }).catch(err => {
+      alert("Failed to get access token.");
+      throw new Error("Token exchange error:", err);
     });
+
+    const result = JSON.parse(response.responseText);
+    TokenStorage.saveToken(result);
+
+    if (window.opener) {
+      window.opener.postMessage({
+        type: "oauth_complete",
+        access_token: result.access_token,
+        refresh_token: result.refresh_token,
+        expires_in: result.expires_in
+      }, "*");
+      window.close();
+    }
   }
 
-  refreshAccessToken() {
+  async refreshAccessToken() {
     const authHeader = btoa(`${TokenStorage.clientId}:${TokenStorage.clientSecret}`);
     console.info("🔄 Attempting to refresh token...");
 
-    GM_xmlhttpRequest({
+    const response = await GMRequest.send({
       method: "POST",
-      url: this.config.TOKEN_URL,
+      url: OAuthClient.CONFIG.TOKEN_URL,
       headers: {
         "Authorization": `Basic ${authHeader}`,
         "Content-Type": "application/x-www-form-urlencoded",
@@ -317,22 +333,19 @@ class OAuthClient {
         grant_type: "refresh_token",
         refresh_token: TokenStorage.refreshToken,
       }).toString(),
-      onload: (response) => this.handleRefreshResponse(response),
-      onerror: (err) => {
-        console.error("Refresh request failed:", err);
-      }
-    });
-  }
-
-  handleRefreshResponse(response) {
-    if (response.status === 200) {
-      const result = JSON.parse(response.responseText);
-      TokenStorage.saveToken(result);
-      console.info("✅ Token refreshed successfully.");
-    } else {
+    }).catch(err => {
       console.error("🔁 Token refresh failed:", response);
       alert("Refresh token is invalid or expired. Please log in again.");
-    }
+      throw new Error("Refresh request failed:", err);
+    });
+
+    this.onSuccessfulRefreshResponse(response);
+  }
+
+  onSuccessfulRefreshResponse(response) {
+    const result = JSON.parse(response.responseText);
+    TokenStorage.saveToken(result);
+    console.info("✅ Token refreshed successfully.");
   }
 }
 
@@ -374,6 +387,8 @@ class OAuthFlow {
     if (code) {
       console.debug("Authorization code detected:", code);
       this.client.exchangeCodeForToken(code);
+    } else {
+      console.warn("Could not find authorization code!");
     }
   }
 
@@ -399,7 +414,167 @@ class OAuthFlow {
       }
     } else {
       console.info("🔐 No access token found. Use menu to authenticate.");
+      alert("🔐 No access token found. Please use the menu to login.");
     }
+  }
+}
+
+class SongSelectService {
+  static async fetchSongDetails(songId, slug) {
+    const res = await fetch(`https://songselect.ccli.com/api/GetSongDetails?songNumber=${songId}&slug=${slug}`);
+    const json = await res.json();
+    return json.payload || {};
+  }
+
+  static extractArrangementKey(payload) {
+    return Array.isArray(payload.defaultKey) && payload.defaultKey.length > 0
+      ? payload.defaultKey[0]
+      : "C";
+  }
+
+  static extractTitle(payload) {
+    return payload.title || "";
+  }
+
+  static extractAdmin(payload) {
+    return Array.isArray(payload.administrators) ? payload.administrators.join(", ") : "";
+  }
+
+  static extractAuthor(payload) {
+    return Array.isArray(payload.authors)
+      ? payload.authors.map(a => typeof a === "string" ? a : a.label).join(", ")
+      : "";
+  }
+
+  static extractCopyright(payload) {
+    return payload.copyrights || "";
+  }
+
+  static extractThemes(payload) {
+    return Array.isArray(payload.themes)
+      ? payload.themes.map(t => typeof t === "string" ? t : t.label)
+      : [];
+  }
+}
+
+class PlanningCenterService {
+  static BASE_URL = "https://api.planningcenteronline.com/services/v2";
+
+  static defaultHeaders(extra = {}) {
+    return {
+      "Authorization": `Bearer ${TokenStorage.accessToken}`,
+      "Content-Type": "application/json",
+      ...extra
+    };
+  }
+
+  static async findSongByCcli(songId) {
+    const response = await GMRequest.send({
+      method: "GET",
+      url: `${this.BASE_URL}/songs?where[ccli_number]=${songId}`,
+      headers: this.defaultHeaders(),
+    });
+    const json = JSON.parse(response.responseText);
+    return (json.data && json.data.length > 0) ? json.data[0] : null;
+  }
+
+  static async createSong(songId, payload) {
+    const songPayload = {
+      data: {
+        type: "Song",
+        attributes: {
+          title: SongSelectService.extractTitle(payload),
+          admin: SongSelectService.extractAdmin(payload),
+          author: SongSelectService.extractAuthor(payload),
+          copyright: SongSelectService.extractCopyright(payload),
+          ccli_number: songId,
+          hidden: false,
+          themes: SongSelectService.extractThemes(payload)
+        }
+      }
+    };
+    const response = await GMRequest.send({
+      method: "POST",
+      url: `${this.BASE_URL}/songs`,
+      headers: this.defaultHeaders(),
+      data: JSON.stringify(songPayload),
+    });
+    return JSON.parse(response.responseText).data;
+  }
+
+  static async getArrangements(songApiId) {
+    const response = await GMRequest.send({
+      method: "GET",
+      url: `${this.BASE_URL}/songs/${songApiId}/arrangements`,
+      headers: this.defaultHeaders(),
+    });
+    const json = JSON.parse(response.responseText);
+    return json.data || [];
+  }
+
+  static async patchArrangement(songApiId, arrangementId, arrangementKey, chordPro, bpm = null, lyricsEnabled = true) {
+    const arrangementPayload = {
+      data: {
+        type: "Arrangement",
+        attributes: {
+          chord_chart_key: arrangementKey,
+          lyrics_enabled: lyricsEnabled,
+          chord_chart: chordPro,
+          ...(bpm ? { bpm } : {})
+        }
+      }
+    };
+    const response = await GMRequest.send({
+      method: "PATCH",
+      url: `${this.BASE_URL}/songs/${songApiId}/arrangements/${arrangementId}`,
+      headers: this.defaultHeaders(),
+      data: JSON.stringify(arrangementPayload),
+    });
+    return JSON.parse(response.responseText);
+  }
+
+  static async createArrangement(songApiId, name, arrangementKey, chordPro, bpm = null, lyricsEnabled = true) {
+    const arrangementPayload = {
+      data: {
+        type: "Arrangement",
+        attributes: {
+          name,
+          chord_chart_key: arrangementKey,
+          lyrics_enabled: lyricsEnabled,
+          chord_chart: chordPro,
+          ...(bpm ? { bpm } : {})
+        }
+      }
+    };
+    const response = await GMRequest.send({
+      method: "POST",
+      url: `${this.BASE_URL}/songs/${songApiId}/arrangements`,
+      headers: this.defaultHeaders(),
+      data: JSON.stringify(arrangementPayload),
+    });
+    return JSON.parse(response.responseText);
+  }
+
+  static async setArrangementKeys(songApiId, arrangementId, startingKey, endingKey = null, name = "Default", alternateKeys = []) {
+    const keysPayload = {
+      data: {
+        type: "Key",
+        attributes: {
+          name,
+          starting_key: startingKey,
+          // Only include ending_key and alternate_keys if provided
+          ...(endingKey ? { ending_key: endingKey } : {}),
+          ...(alternateKeys.length > 0 ? { alternate_keys: alternateKeys } : {})
+        }
+      }
+    };
+    const response = await GMRequest.send({
+      method: "POST",
+      url: `${this.BASE_URL}/songs/${songApiId}/arrangements/${arrangementId}/keys`,
+      headers: this.defaultHeaders(),
+      data: JSON.stringify(keysPayload),
+    });
+    return JSON.parse(response.responseText);
   }
 }
 
@@ -418,7 +593,7 @@ class App {
   /**
    * Number of ms between checks whether the script should run
    */
-  static INTERVAL_DELAY = 1000;
+  static INTERVAL_DELAY = 150000; // TODO: Reduce back to 1000
 
   constructor() {
     this.downloadHistory = [];
@@ -426,45 +601,90 @@ class App {
   }
 
   run() {
-    setInterval(() => this.init(), App.INTERVAL_DELAY);
-
-    this.init();
+    // Only set up menu commands, do not auto-run main logic
+    this.authFlow.init();
+    GM_registerMenuCommand("⬇️ Import Song to Planning Center", () => this.importSongToPlanningCenter());
   }
 
-  async init() {
+  async importSongToPlanningCenter() {
     if (!this.isCorrectPage()) {
-      console.debug("Incorrect page!");
+      alert("Not on a SongSelect song page!");
       return;
     }
 
-    this.authFlow.init();
-
-    const songDetails = await SongFinder.getSongDetails();
-
-    if (this.downloadHistory.includes(songDetails.id)) {
-      console.debug("Song has already been downloaded!");
+    if (!TokenStorage.isTokenValid) {
+      alert("You must be logged in to Planning Center first.");
       return;
     }
 
-    console.info(`Song details: ${JSON.stringify(songDetails)}`);
-    this.downloadHistory.push(songDetails.id);
+    const songId = SongFinder.getSongId();
+    let song = await PlanningCenterService.findSongByCcli(songId);
 
+    // Always fetch SongSelect details for arrangement step
+    const slug = location.pathname.split("/").pop();
+    const payload = await SongSelectService.fetchSongDetails(songId, slug);
+    const arrangementKey = SongSelectService.extractArrangementKey(payload);
+    const title = SongSelectService.extractTitle(payload);
+    const bpm = payload.bpm && !isNaN(Number(payload.bpm)) ? Number(payload.bpm) : null;
+
+    let songApiId;
+    if (!song) {
+      const createdSong = await PlanningCenterService.createSong(songId, payload);
+      songApiId = createdSong.id;
+      alert("✅ Song added to Planning Center!");
+    } else {
+      songApiId = song.id;
+      alert("This song already exists in Planning Center!");
+    }
+
+    const songDetails = new SongDetails(songId, arrangementKey);
     const chordProText = await ChordProAPI.fetchChordProText(songDetails);
-    console.info(`Chord pro text:\n${chordProText}`);
+    const chordPro = ChordProParser.parse(chordProText);
 
-    const result = ChordProParser.parse(chordProText);
-    console.info(`Planning Center version:\n${result}`);
+    try {
+      const arrangements = await PlanningCenterService.getArrangements(songApiId);
+      let arrangementId;
+      if (arrangements.length > 0) {
+        arrangementId = arrangements[0].id;
+        await PlanningCenterService.patchArrangement(
+          songApiId,
+          arrangementId,
+          arrangementKey,
+          chordPro,
+          bpm
+        );
+        alert("✅ Arrangement updated in Planning Center!");
+      } else {
+        const createdArrangement = await PlanningCenterService.createArrangement(
+          songApiId,
+          title || "Default Arrangement",
+          arrangementKey,
+          chordPro,
+          bpm
+        );
+        arrangementId = createdArrangement.data?.id;
+        alert("✅ Arrangement added to Planning Center!");
+      }
 
-    alert("Saving the ChordPro file to your clipboard!");
-    GM_setClipboard(result);
+      // Set the default key for the arrangement using the keys endpoint
+      if (arrangementId && arrangementKey) {
+        await PlanningCenterService.setArrangementKeys(
+          songApiId,
+          arrangementId,
+          arrangementKey,
+        );
+        console.info("Default key set for arrangement:", arrangementKey);
+      }
+    } catch (e) {
+      console.error("Arrangement step failed:", e);
+    }
   }
 
   isCorrectPage() {
     const pathname = location.pathname;
     const startsWithSongs = pathname.startsWith("/songs");
-    const endsOnChordSheet = pathname.endsWith("/viewchordsheet");
 
-    return startsWithSongs && endsOnChordSheet;
+    return startsWithSongs;
   }
 }
 
