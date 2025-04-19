@@ -14,12 +14,6 @@
 // @updateURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
 // ==/UserScript==
 
-// TODO: Check if song already exists in PC using CCLI ID.
-// If not, pull in all info about the song (ID, ChordPro, Default Key, Tempo, etc.)
-// Then add it the song to PC.
-
-// TODO: If authentication fails we could automatically attempt to refresh the token.
-
 class IntegerParser {
   /**
    * Parses a valid finite integer from a string
@@ -533,12 +527,12 @@ class PlanningCenterService {
     return JSON.parse(response.responseText);
   }
 
-  static async createArrangement(songApiId, name, arrangementKey, chordPro, bpm = null, lyricsEnabled = true) {
+  static async createArrangement(songApiId, arrangementKey, chordPro, bpm = null, lyricsEnabled = true) {
     const arrangementPayload = {
       data: {
         type: "Arrangement",
         attributes: {
-          name,
+          name: "Default Arrangement",
           chord_chart_key: arrangementKey,
           lyrics_enabled: lyricsEnabled,
           chord_chart: chordPro,
@@ -580,23 +574,11 @@ class PlanningCenterService {
 
 class App {
   /**
-   * Used to store songs that have already been downloaded - to prevent the script from unnecessarily calling the API
-   * @type {number[]}
-   */
-  downloadHistory;
-
-  /**
    * Used to handle PlanningCenter's OAuth2 flow.
    */
   authFlow;
 
-  /**
-   * Number of ms between checks whether the script should run
-   */
-  static INTERVAL_DELAY = 150000; // TODO: Reduce back to 1000
-
   constructor() {
-    this.downloadHistory = [];
     this.authFlow = new OAuthFlow(this.client);
   }
 
@@ -631,14 +613,25 @@ class App {
     if (!song) {
       const createdSong = await PlanningCenterService.createSong(songId, payload);
       songApiId = createdSong.id;
-      alert("✅ Song added to Planning Center!");
+      console.info("✅ Song added to Planning Center!");
     } else {
       songApiId = song.id;
-      alert("This song already exists in Planning Center!");
+      alert("❌ This song already exists in Planning Center!");
+      return;
     }
 
     const songDetails = new SongDetails(songId, arrangementKey);
-    const chordProText = await ChordProAPI.fetchChordProText(songDetails);
+    let chordProText;
+    try {
+      chordProText = await ChordProAPI.fetchChordProText(songDetails);
+    } catch (e) {
+      alert("❌ This song does not have a ChordPro file available on CCLI.");
+      return;
+    }
+    if (!chordProText || chordProText.trim() === "") {
+      alert("❌ This song does not have a ChordPro file available on CCLI.");
+      return;
+    }
     const chordPro = ChordProParser.parse(chordProText);
 
     try {
@@ -657,7 +650,6 @@ class App {
       } else {
         const createdArrangement = await PlanningCenterService.createArrangement(
           songApiId,
-          title || "Default Arrangement",
           arrangementKey,
           chordPro,
           bpm
@@ -668,12 +660,14 @@ class App {
 
       // Set the default key for the arrangement using the keys endpoint
       if (arrangementId && arrangementKey) {
+        console.info("Adding default key set for arrangement:", arrangementKey);
         await PlanningCenterService.setArrangementKeys(
           songApiId,
           arrangementId,
           arrangementKey,
-        );
-        console.info("Default key set for arrangement:", arrangementKey);
+        ).catch(err => {
+          console.error("Failed to set arrangement keys:", err);
+        });
       }
     } catch (e) {
       console.error("Arrangement step failed:", e);
