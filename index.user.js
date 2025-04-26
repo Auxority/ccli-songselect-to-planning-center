@@ -732,7 +732,6 @@ class App {
       console.info("✅ Added default key for arrangement:", songDetails.key);
     } catch (error) {
       console.warn("Failed to add default key:", error);
-      return;
     }
 
     alert("✅ Song has been added to Planning Center!");
