@@ -8,7 +8,8 @@
 // @grant       GM_setValue
 // @grant       GM_xmlhttpRequest
 // @grant       GM_registerMenuCommand
-// @version     0.5.0
+// @grant       GM_download
+// @version     0.6.0
 // @author      aux
 // @downloadURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
 // @updateURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
@@ -109,6 +110,10 @@ class SongSelectAPI {
    * @returns {Promise<ChordProResponse>} the ChordPro file content
    */
   async fetchChordProText(songDetails) {
+    if (!songDetails.products.chordPro.exists) {
+      throw new Error("This song does not have a ChordPro file available on CCLI.");
+    }
+
     const parameters = this.createChordProParameters(songDetails);
     const url = `${SongSelectAPI.BASE_URL}/GetSongChordPro?${parameters.toString()}`;
     const res = await fetch(url);
@@ -121,7 +126,7 @@ class SongSelectAPI {
 
     const rawText = payload.trimStart();
     if (!rawText || rawText.trim() === "") {
-      throw new Error("❌ This song does not have a ChordPro file available on CCLI.");
+      throw new Error("The ChordPro file does not seem to be available on CCLI.");
     }
 
     return new ChordProResponse(rawText);
@@ -138,6 +143,51 @@ class SongSelectAPI {
       key: songDetails.key,
       style: SongSelectAPI.CHORD_NOTATION,
       columns: SongSelectAPI.CHORD_COLUMNS,
+    });
+  }
+
+  /**
+   * Downloads a leadsheet from SongSelect
+   * @param {SongDetails} songDetails 
+   * @returns {Promise<Blob>} the leadsheet PDF blob
+   */
+  async downloadLeadsheet(songDetails) {
+    if (!songDetails.products.lead.exists) {
+      throw new Error("This song does not have a leadsheet available on CCLI.");
+    }
+
+    const parameters = this.createLeadsheetParameters(songDetails);
+    const url = `${SongSelectAPI.BASE_URL}/GetSongLeadPdf?${parameters.toString()}`;
+
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to download leadsheet: ${response.statusText}`);
+      }
+
+      const pdfBlob = await response.blob();
+      if (pdfBlob.size === 0) {
+        throw new Error("Attempted to donload a leadsheet without it being available on CCLI.");
+      }
+
+      return pdfBlob;
+    } catch (error) {
+      throw new Error("Error downloading leadsheet:", error);
+    }
+  }
+
+  createLeadsheetParameters(songDetails) {
+    return new URLSearchParams({
+      songNumber: songDetails.ccliId,
+      key: songDetails.key,
+      style: SongSelectAPI.CHORD_NOTATION,
+      columns: SongSelectAPI.CHORD_COLUMNS,
+      octave: 0,
+      noteSize: 0,
+      orientation: "Portrait",
+      paperSize: "A4",
+      activityType: "downloaded",
+      renderer: "legacy",
     });
   }
 }
@@ -435,6 +485,61 @@ class OAuthFlow {
   }
 }
 
+class SongProduct {
+  constructor(
+    exists = false,
+    authorized = false,
+    noAuthReason = "",
+    exceededMaxUniqueSongCount = false,
+  ) {
+    this.exists = exists;
+    this.authorized = authorized;
+    this.noAuthReason = noAuthReason;
+    this.exceededMaxUniqueSongCount = exceededMaxUniqueSongCount;
+  }
+
+  static deserialize(json) {
+    return new SongProduct(
+      json.exists,
+      json.authorized,
+      json.noAuthReason,
+      json.exceededMaxUniqueSongCount,
+    );
+  }
+}
+
+class SongProducts {
+  constructor(
+    general = new SongProduct(),
+    lyrics = new SongProduct(),
+    chords = new SongProduct(),
+    chordPro = new SongProduct(),
+    lead = new SongProduct(),
+    vocal = new SongProduct(),
+    multitracks = new SongProduct(),
+  ) {
+    this.general = general;
+    this.lyrics = lyrics;
+    this.chords = chords;
+    this.chordPro = chordPro;
+    this.lead = lead;
+    this.vocal = vocal;
+    this.multitracks = multitracks;
+  }
+
+  static deserialize(json) {
+    return new SongProducts(
+      SongProduct.deserialize(json.general),
+      SongProduct.deserialize(json.lyrics),
+      SongProduct.deserialize(json.chords),
+      SongProduct.deserialize(json.chordPro),
+      SongProduct.deserialize(json.lead),
+      SongProduct.deserialize(json.vocal),
+      SongProduct.deserialize(json.multitracks),
+    );
+  }
+}
+
 class SongDetails {
   constructor(
     ccliId = 0,
@@ -444,7 +549,8 @@ class SongDetails {
     copyright = "",
     title = "",
     author = "",
-    themes = ""
+    themes = "",
+    products = new SongProducts()
   ) {
     this.ccliId = ccliId;
     this.admin = admin;
@@ -454,6 +560,7 @@ class SongDetails {
     this.title = title;
     this.author = author;
     this.themes = themes;
+    this.products = products;
   }
 
   /**
@@ -470,7 +577,8 @@ class SongDetails {
       json.copyrights,
       json.title,
       SongDetails._extractAuthor(json.authors),
-      SongDetails._extractThemes(json.themes)
+      SongDetails._extractThemes(json.themes),
+      SongProducts.deserialize(json.products),
     );
   }
 
@@ -569,6 +677,11 @@ class PlanningCenterAPI {
       }
     };
     return await this._patchRequest(`/songs/${songApiId}/arrangements/${arrangementId}`, payload);
+  }
+
+  async getArrangementKeys(songApiId, arrangementId) {
+    const json = await this._getRequest(`/songs/${songApiId}/arrangements/${arrangementId}/keys`);
+    return json.data;
   }
 
   async addArrangementKey(songApiId, arrangementId, startingKey) {
@@ -691,7 +804,7 @@ class App {
 
       arrangementId = existingArrangements[0].id;
       if (!arrangementId || !songDetails.key) {
-        throw new Error("❌ Arrangement ID or key is missing."); 
+        throw new Error("❌ Arrangement ID or key is missing.");
       }
     } catch (err) {
       console.error("Failed to fetch arrangements:", err);
@@ -722,16 +835,52 @@ class App {
       alert("❌ Failed to update arrangement.");
       return;
     }
-    
+
+    let planningCenterKey;
+    const existingKeys = await this.planningCenterService.getArrangementKeys(songId, arrangementId);
+    console.debug("Existing keys:", existingKeys);
+    if (existingKeys && existingKeys.length > 0) {
+      planningCenterKey = existingKeys.find(key => key.attributes.starting_key === songDetails.key);
+      if (!planningCenterKey) {
+        try {
+          planningCenterKey = await this.planningCenterService.addArrangementKey(
+            songId,
+            arrangementId,
+            songDetails.key,
+          );
+          console.info("✅ Added default key for arrangement:", songDetails.key);
+        } catch (error) {
+          console.warn("Failed to add default key:", error);
+        }
+      }
+    }
+
+    let leadsheetBlob;
     try {
-      await this.planningCenterService.addArrangementKey(
-        songId,
-        arrangementId,
-        songDetails.key,
-      );
-      console.info("✅ Added default key for arrangement:", songDetails.key);
+      if (!planningCenterKey || !planningCenterKey.id) {
+        throw new Error("❌ No valid key found for the arrangement.");
+      }
+
+      if (!songDetails.products.lead.exists) {
+        throw new Error("This song does not have a leadsheet available on CCLI.");
+      }
+
+      leadsheetBlob = await this.songSelectAPI.downloadLeadsheet(songDetails);
+      console.info("✅ Leadsheet downloaded successfully.");
     } catch (error) {
-      console.warn("Failed to add default key:", error);
+      console.warn("Failed to download leadsheet:", error);
+    }
+
+    if (leadsheetBlob) {
+      const sanitizedTitle = songDetails.title.replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_');
+      const filename = `${sanitizedTitle}-${songDetails.key}-lead.pdf`;
+
+      GM_download({
+        url: URL.createObjectURL(leadsheetBlob),
+        name: filename,
+        onload: () => console.info(`✅ Leadsheet downloaded as ${filename}`),
+        onerror: (error) => console.error(`Failed to download leadsheet: ${error}`)
+      });
     }
 
     alert("✅ Song has been added to Planning Center!");
