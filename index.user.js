@@ -9,7 +9,7 @@
 // @grant       GM_xmlhttpRequest
 // @grant       GM_registerMenuCommand
 // @grant       GM_download
-// @version     0.6.0
+// @version     0.7.0
 // @author      aux
 // @downloadURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
 // @updateURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
@@ -836,31 +836,29 @@ class App {
       return;
     }
 
-    let planningCenterKey;
+    let existingKey;
+    
     const existingKeys = await this.planningCenterService.getArrangementKeys(songId, arrangementId);
-    console.debug("Existing keys:", existingKeys);
     if (existingKeys && existingKeys.length > 0) {
-      planningCenterKey = existingKeys.find(key => key.attributes.starting_key === songDetails.key);
-      if (!planningCenterKey) {
-        try {
-          planningCenterKey = await this.planningCenterService.addArrangementKey(
-            songId,
-            arrangementId,
-            songDetails.key,
-          );
-          console.info("✅ Added default key for arrangement:", songDetails.key);
-        } catch (error) {
-          console.warn("Failed to add default key:", error);
-        }
+      existingKey = existingKeys.find(key => key.attributes.starting_key === songDetails.key);
+    }
+
+    if (!existingKey) {
+      console.info("No existing key found. Adding default key...");
+      try {
+        existingKey = await this.planningCenterService.addArrangementKey(
+          songId,
+          arrangementId,
+          songDetails.key,
+        );
+        console.info("✅ Added default key for arrangement:", songDetails.key);
+      } catch (error) {
+        console.warn("Failed to add default key:", error);
       }
     }
 
     let leadsheetBlob;
     try {
-      if (!planningCenterKey || !planningCenterKey.id) {
-        throw new Error("❌ No valid key found for the arrangement.");
-      }
-
       if (!songDetails.products.lead.exists) {
         throw new Error("This song does not have a leadsheet available on CCLI.");
       }
