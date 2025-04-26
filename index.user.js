@@ -8,7 +8,7 @@
 // @grant       GM_setValue
 // @grant       GM_xmlhttpRequest
 // @grant       GM_registerMenuCommand
-// @version     0.3.0
+// @version     0.4.0
 // @author      aux
 // @downloadURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
 // @updateURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
@@ -657,40 +657,39 @@ class App {
     }
 
     const ccliSongId = this.songFinder.getSongId();
-    const song = await this.planningCenterService.findSongById(ccliSongId).catch(console.debug);
+    const existingSong = await this.planningCenterService.findSongById(ccliSongId).catch(console.debug);
 
     const slug = location.pathname.split("/").pop();
     const songDetails = await this.songSelectAPI.fetchSongDetails(ccliSongId, slug);
 
-    if (song) {
-      console.info("Song already exists in Planning Center.");
-      alert("❌ This song already exists in Planning Center!");
-      return;
-    }
-
     let songId;
-    try {
-      const createdSong = await this.planningCenterService.addSong(ccliSongId, songDetails);
-      console.info("✅ Song added to Planning Center!");
-      songId = createdSong.id;
-      if (!songId) {
-        console.error("Song ID is missing.");
-        throw new Error("❌ Song ID is missing.");
+    if (existingSong) {
+      console.info("Song already exists in Planning Center.");
+      songId = existingSong.id;
+    } else {
+      try {
+        const createdSong = await this.planningCenterService.addSong(ccliSongId, songDetails);
+        console.info("✅ Song added to Planning Center!");
+        songId = createdSong.id;
+        if (!songId) {
+          console.error("Song ID is missing.");
+          throw new Error("❌ Song ID is missing.");
+        }
+      } catch (error) {
+        console.error("Failed to add song:", error);
+        alert("❌ Failed to add song.");
+        return;
       }
-    } catch (error) {
-      console.error("Failed to add song:", error);
-      alert("❌ Failed to add song.");
-      return;
     }
 
     let arrangementId;
     try {
-      const arrangements = await this.planningCenterService.getArrangements(songId);
-      if (!arrangements || arrangements.length === 0) {
+      const existingArrangements = await this.planningCenterService.getArrangements(songId);
+      if (!existingArrangements || existingArrangements.length === 0) {
         throw new Error("No arrangements found for this song.");
       }
 
-      arrangementId = arrangements[0].id;
+      arrangementId = existingArrangements[0].id;
       if (!arrangementId || !songDetails.key) {
         throw new Error("❌ Arrangement ID or key is missing."); 
       }
@@ -732,8 +731,7 @@ class App {
       );
       console.info("✅ Added default key for arrangement:", songDetails.key);
     } catch (error) {
-      console.error("Failed to add default key:", error);
-      alert("❌ Failed to add default key for arrangement.");
+      console.warn("Failed to add default key:", error);
       return;
     }
 
