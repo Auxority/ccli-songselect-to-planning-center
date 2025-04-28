@@ -9,7 +9,7 @@
 // @grant       GM_xmlhttpRequest
 // @grant       GM_registerMenuCommand
 // @grant       GM_download
-// @version     0.7.0
+// @version     0.8.0
 // @author      aux
 // @downloadURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
 // @updateURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
@@ -176,6 +176,11 @@ class SongSelectAPI {
     }
   }
 
+  /**
+   * Create leadsheet parameters for the API request
+   * @param {SongDetails} songDetails 
+   * @returns the URLSearchParams for the leadsheet request
+   */
   createLeadsheetParameters(songDetails) {
     return new URLSearchParams({
       songNumber: songDetails.ccliId,
@@ -569,13 +574,15 @@ class SongDetails {
    * @returns {SongDetails}
    */
   static deserialize(json) {
+    console.debug("Deserializing song details:", json);
+
     return new SongDetails(
       json.ccliSongNumber,
       SongDetails._extractAdmin(json.administrators),
       SongDetails._extractDefaultKey(json.defaultKey),
       SongDetails._extractBpm(json.bpm),
-      json.copyrights,
-      json.title,
+      json.copyrights.trim(),
+      json.title.trim(),
       SongDetails._extractAuthor(json.authors),
       SongDetails._extractThemes(json.themes),
       SongProducts.deserialize(json.products),
@@ -619,9 +626,9 @@ class SongDetails {
 
   static _extractAuthor(author) {
     if (Array.isArray(author)) {
-      return author.map(a => typeof a === "string" ? a : a.label).join(", ");
+      return author.map(a => typeof a === "string" ? a.trim() : a.label.trim()).join(", ");
     } else if (typeof author === "string") {
-      return author;
+      return author.trim();
     } else {
       return "";
     }
@@ -633,6 +640,64 @@ class SongDetails {
 
   static _extractThemes(themes) {
     return Array.isArray(themes) ? themes.map(t => typeof t === "string" ? t : t.label) : [];
+  }
+}
+
+/**
+ * Represents the attributes of a file in Planning Center
+ * @param {string} name - The name of the file
+ * @param {string} contentType - The content type of the file
+ * @param {number} fileSize - The size of the file in bytes
+ */
+class FileAttributes {
+  constructor(
+    name = "",
+    contentType = "",
+    fileSize = 0,
+  ) {
+    this.name = name;
+    this.contentType = contentType;
+    this.fileSize = fileSize;
+  }
+
+  static deserialize(json) {
+    return new FileAttributes(
+      json.name,
+      json.content_type,
+      json.file_size,
+    );
+  }
+}
+
+/**
+ * Represents a file in Planning Center - returned from the upload API
+ * @param {string} id - The ID of the file
+ * @param {string} type - The type of the file
+ * @param {FileAttributes} attributes - The attributes of the file
+ */
+class PlanningCenterFile {
+  constructor(
+    id = "",
+    type = "",
+    attributes = new FileAttributes(),
+  ) {
+    this.id = id;
+    this.type = type;
+    this.attributes = attributes;
+  }
+
+  static deserialize(json) {
+    if (!json || !Array.isArray(json) || json.length === 0) {
+      throw new Error("Invalid JSON data for PlanningCenterFile");
+    }
+
+    const firstFile = json[0];
+
+    return new PlanningCenterFile(
+      firstFile.id,
+      firstFile.type,
+      FileAttributes.deserialize(firstFile.attributes),
+    );
   }
 }
 
@@ -696,6 +761,59 @@ class PlanningCenterAPI {
     };
 
     return await this._postRequest(`/songs/${songApiId}/arrangements/${arrangementId}/keys`, keysPayload);
+  }
+
+  /**
+   * 
+   * @param {SongDetails} songDetails the song details
+   * @param {number} songId the planning center song ID
+   * @param {number} arrangementId 
+   * @param {Blob} blob 
+   */
+  async uploadLeadsheet(songDetails, songId, arrangementId, blob) {
+    const sanitizedTitle = songDetails.title.replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_');
+    const filename = `${sanitizedTitle}-${songDetails.key}-lead.pdf`;
+
+    // use POST https://upload.planningcenteronline.com/v2/files with a multipart/form-data body
+    const formData = new FormData();
+    formData.append("file", blob, filename);
+
+    const url = `https://upload.planningcenteronline.com/v2/files`;
+    
+    const response = await this.gmHttpClient.post(url, null, formData);
+    if (response.status < 200 || response.status >= 300) {
+      console.error("Failed to upload leadsheet:", response);
+      throw new Error("Failed to upload leadsheet.");
+    }
+
+    console.debug("Leadsheet upload response:", response);
+    
+    const json = JSON.parse(response.responseText);
+    if (!json.data || json.data.length === 0) {
+      throw new Error("Failed to upload leadsheet.");
+    }
+
+    const file = PlanningCenterFile.deserialize(json.data);
+    
+    // Now we need to attach the file to the arrangement
+    const payload = {
+      data: {
+        type: "Attachment",
+        attributes: {
+          file_upload_identifier: file.id,
+          filename: file.attributes.name,
+        }
+      }
+    };
+
+    const attachResponse = await this._postRequest(`/songs/${songId}/arrangements/${arrangementId}/attachments`, payload);
+    if (attachResponse.status < 200 || attachResponse.status >= 300) {
+      throw new Error("Failed to attach leadsheet.", attachResponse);
+    }
+
+    console.debug("Leadsheet attach response:", attachResponse);
+
+    return attachResponse;
   }
 
   async _getRequest(endpoint) {
@@ -775,16 +893,16 @@ class App {
     const slug = location.pathname.split("/").pop();
     const songDetails = await this.songSelectAPI.fetchSongDetails(ccliSongId, slug);
 
-    let songId;
+    let planningCenterSongId;
     if (existingSong) {
       console.info("Song already exists in Planning Center.");
-      songId = existingSong.id;
+      planningCenterSongId = existingSong.id;
     } else {
       try {
         const createdSong = await this.planningCenterService.addSong(ccliSongId, songDetails);
         console.info("✅ Song added to Planning Center!");
-        songId = createdSong.id;
-        if (!songId) {
+        planningCenterSongId = createdSong.id;
+        if (!planningCenterSongId) {
           console.error("Song ID is missing.");
           throw new Error("❌ Song ID is missing.");
         }
@@ -797,7 +915,7 @@ class App {
 
     let arrangementId;
     try {
-      const existingArrangements = await this.planningCenterService.getArrangements(songId);
+      const existingArrangements = await this.planningCenterService.getArrangements(planningCenterSongId);
       if (!existingArrangements || existingArrangements.length === 0) {
         throw new Error("No arrangements found for this song.");
       }
@@ -823,7 +941,7 @@ class App {
 
     try {
       await this.planningCenterService.updateArrangement(
-        songId,
+        planningCenterSongId,
         arrangementId,
         songDetails.key,
         chordProResponse.toPlanningCenter(),
@@ -837,8 +955,8 @@ class App {
     }
 
     let existingKey;
-    
-    const existingKeys = await this.planningCenterService.getArrangementKeys(songId, arrangementId);
+
+    const existingKeys = await this.planningCenterService.getArrangementKeys(planningCenterSongId, arrangementId);
     if (existingKeys && existingKeys.length > 0) {
       existingKey = existingKeys.find(key => key.attributes.starting_key === songDetails.key);
     }
@@ -847,7 +965,7 @@ class App {
       console.info("No existing key found. Adding default key...");
       try {
         existingKey = await this.planningCenterService.addArrangementKey(
-          songId,
+          planningCenterSongId,
           arrangementId,
           songDetails.key,
         );
@@ -864,21 +982,13 @@ class App {
       }
 
       leadsheetBlob = await this.songSelectAPI.downloadLeadsheet(songDetails);
-      console.info("✅ Leadsheet downloaded successfully.");
+      console.debug("✅ Leadsheet downloaded successfully.");
     } catch (error) {
       console.warn("Failed to download leadsheet:", error);
     }
 
     if (leadsheetBlob) {
-      const sanitizedTitle = songDetails.title.replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_');
-      const filename = `${sanitizedTitle}-${songDetails.key}-lead.pdf`;
-
-      GM_download({
-        url: URL.createObjectURL(leadsheetBlob),
-        name: filename,
-        onload: () => console.info(`✅ Leadsheet downloaded as ${filename}`),
-        onerror: (error) => console.error(`Failed to download leadsheet: ${error}`)
-      });
+      await this.planningCenterService.uploadLeadsheet(songDetails, planningCenterSongId, arrangementId, leadsheetBlob);
     }
 
     alert("✅ Song has been added to Planning Center!");
