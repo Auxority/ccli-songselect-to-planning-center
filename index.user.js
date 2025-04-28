@@ -924,6 +924,8 @@ class App {
       if (!arrangementId || !songDetails.key) {
         throw new Error("❌ Arrangement ID or key is missing.");
       }
+
+      console.info("✅ Arrangement found in Planning Center!");
     } catch (err) {
       console.error("Failed to fetch arrangements:", err);
       alert("❌ Failed to fetch arrangements.");
@@ -933,6 +935,7 @@ class App {
     let chordProResponse;
     try {
       chordProResponse = await this.songSelectAPI.fetchChordProText(songDetails);
+      console.info("✅ ChordPro text fetched successfully.");
     } catch (err) {
       console.error("Failed to fetch ChordPro text:", err);
       alert("❌ This song does not have a ChordPro file available on CCLI.");
@@ -958,6 +961,8 @@ class App {
 
     const existingKeys = await this.planningCenterService.getArrangementKeys(planningCenterSongId, arrangementId);
     if (existingKeys && existingKeys.length > 0) {
+      console.info("Existing keys found in Planning Center.");
+      console.debug("Existing keys:", existingKeys);
       existingKey = existingKeys.find(key => key.attributes.starting_key === songDetails.key);
     }
 
@@ -982,13 +987,19 @@ class App {
       }
 
       leadsheetBlob = await this.songSelectAPI.downloadLeadsheet(songDetails);
-      console.debug("✅ Leadsheet downloaded successfully.");
+      console.info("✅ Leadsheet downloaded successfully.");
     } catch (error) {
       console.warn("Failed to download leadsheet:", error);
     }
 
     if (leadsheetBlob) {
-      await this.planningCenterService.uploadLeadsheet(songDetails, planningCenterSongId, arrangementId, leadsheetBlob);
+      try {
+        await this.planningCenterService.uploadLeadsheet(songDetails, planningCenterSongId, arrangementId, leadsheetBlob);
+        console.info("✅ Leadsheet uploaded successfully.");
+      } catch (error) {
+        console.error("Failed to upload leadsheet:", error);
+        return;
+      }
     }
 
     alert("✅ Song has been added to Planning Center!");
