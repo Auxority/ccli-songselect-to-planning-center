@@ -9,7 +9,7 @@
 // @grant       GM_xmlhttpRequest
 // @grant       GM_registerMenuCommand
 // @grant       GM_download
-// @version     0.8.0
+// @version     0.9.0
 // @author      aux
 // @downloadURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
 // @updateURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
@@ -890,9 +890,6 @@ class App {
     const ccliSongId = this.songFinder.getSongId();
     const existingSong = await this.planningCenterService.findSongById(ccliSongId).catch(console.debug);
 
-    const slug = location.pathname.split("/").pop();
-    const songDetails = await this.songSelectAPI.fetchSongDetails(ccliSongId, slug);
-
     let planningCenterSongId;
     if (existingSong) {
       console.info("Song already exists in Planning Center.");
@@ -903,7 +900,12 @@ class App {
         return;
       }
       planningCenterSongId = existingSong.id;
-    } else {
+    } 
+    
+    const slug = location.pathname.split("/").pop();
+    const songDetails = await this.songSelectAPI.fetchSongDetails(ccliSongId, slug);
+
+    if (!existingSong) {
       try {
         const createdSong = await this.planningCenterService.addSong(ccliSongId, songDetails);
         console.info("✅ Song added to Planning Center!");
