@@ -20,5 +20,5 @@ This project aims to automate the 24-step process through a userscript.
 ## TODO:
 
 1. Check if a song exists within the archived songs in Planning Center (to prevent issues when adding the song)
-2. Automatically add lead sheets and choir sheets to the arrangement if these exist.
+2. Automatically add choir sheets to the arrangement if these exist.
 3. Extract the tempo/bpm from the chords page or lead sheet page (through the CCLI API).
