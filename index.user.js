@@ -896,6 +896,12 @@ class App {
     let planningCenterSongId;
     if (existingSong) {
       console.info("Song already exists in Planning Center.");
+      const confirmOverwrite = confirm("This song already exists in Planning Center. Do you want to update the default arrangement with the current ChordPro and leadsheet?");
+      if (!confirmOverwrite) {
+        console.info("User cancelled the operation.");
+        alert("❌ Operation cancelled.");
+        return;
+      }
       planningCenterSongId = existingSong.id;
     } else {
       try {
