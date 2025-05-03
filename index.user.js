@@ -751,6 +751,7 @@ class PlanningCenterFile {
 
 class PlanningCenterAPI {
   static BASE_URL = "https://api.planningcenteronline.com/services/v2";
+  static FILE_UPLOAD_ENDPOINT = "https://upload.planningcenteronline.com/v2/files";
 
   constructor() {
     this.tokenStorage = new TokenStorage();
@@ -858,11 +859,8 @@ class PlanningCenterAPI {
     const formData = new FormData();
     formData.append("file", blob, filename);
 
-    const url = "https://upload.planningcenteronline.com/v2/files";
-
-    const response = await this.gmHttpClient.post(url, null, formData);
+    const response = await this.gmHttpClient.post(PlanningCenterAPI.FILE_UPLOAD_ENDPOINT, null, formData);
     if (response.status < 200 || response.status >= 300) {
-      console.error("Failed to upload file:", response);
       throw new Error(`Failed to upload ${filename}.`);
     }
 
