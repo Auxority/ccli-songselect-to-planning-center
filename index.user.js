@@ -9,7 +9,7 @@
 // @grant       GM_xmlhttpRequest
 // @grant       GM_registerMenuCommand
 // @grant       GM_download
-// @version     0.9.0
+// @version     0.10.0
 // @author      aux
 // @downloadURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
 // @updateURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
@@ -187,6 +187,54 @@ class SongSelectAPI {
       key: songDetails.key,
       style: SongSelectAPI.CHORD_NOTATION,
       columns: SongSelectAPI.CHORD_COLUMNS,
+      octave: 0,
+      noteSize: 0,
+      orientation: "Portrait",
+      paperSize: "A4",
+      activityType: "downloaded",
+      renderer: "legacy",
+    });
+  }
+
+  /**
+   * Downloads a vocal sheet from SongSelect
+   * @param {SongDetails} songDetails 
+   * @returns {Promise<Blob>} the vocal sheet PDF blob
+   */
+  async downloadVocalSheet(songDetails) {
+    if (!songDetails.products.vocal.exists) {
+      throw new Error("This song does not have a leadsheet available on CCLI.");
+    }
+
+    const parameters = this.createVocalSheetParameters(songDetails);
+    const url = `${SongSelectAPI.BASE_URL}/GetSongVocalPdf?${parameters.toString()}`;
+
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to download vocal sheet: ${response.statusText}`);
+      }
+
+      const pdfBlob = await response.blob();
+      if (pdfBlob.size === 0) {
+        throw new Error("Attempted to download a vocal sheet without it being available on CCLI.");
+      }
+
+      return pdfBlob;
+    } catch (error) {
+      throw new Error("Error downloading vocal sheet:", error);
+    }
+  }
+
+  /**
+   * Create vocal sheet parameters for the API request
+   * @param {SongDetails} songDetails 
+   * @returns the URLSearchParams for the vocal sheet request
+   */
+  createVocalSheetParameters(songDetails) {
+    return new URLSearchParams({
+      songNumber: songDetails.ccliId,
+      transposeKey: songDetails.key,
       octave: 0,
       noteSize: 0,
       orientation: "Portrait",
@@ -550,7 +598,7 @@ class SongDetails {
     ccliId = 0,
     admin = "",
     key = "C",
-    bpm = 0,
+    bpm = null,
     copyright = "",
     title = "",
     author = "",
@@ -610,7 +658,7 @@ class SongDetails {
     if (bpm && !isNaN(Number(bpm))) {
       return Number(bpm);
     } else {
-      return 0;
+      return null;
     }
   }
 
@@ -764,38 +812,78 @@ class PlanningCenterAPI {
   }
 
   /**
-   * 
+   * Uploads a leadsheet PDF to Planning Center
    * @param {SongDetails} songDetails the song details
    * @param {number} songId the planning center song ID
    * @param {number} arrangementId 
    * @param {Blob} blob 
    */
   async uploadLeadsheet(songDetails, songId, arrangementId, blob) {
-    const sanitizedTitle = songDetails.title.replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_');
-    const filename = `${sanitizedTitle}-${songDetails.key}-lead.pdf`;
+    const filename = this._generateFilename(songDetails, "lead");
+    const file = await this._uploadFile(blob, filename);
+    return await this._attachFileToArrangement(songId, arrangementId, file);
+  }
 
-    // use POST https://upload.planningcenteronline.com/v2/files with a multipart/form-data body
+  /**
+   * Uploads a vocal sheet PDF to Planning Center
+   * @param {SongDetails} songDetails 
+   * @param {number} songId 
+   * @param {number} arrangementId 
+   * @param {Blob} blob 
+   */
+  async uploadVocalSheet(songDetails, songId, arrangementId, blob) {
+    const filename = this._generateFilename(songDetails, "vocal");
+    const file = await this._uploadFile(blob, filename);
+    return await this._attachFileToArrangement(songId, arrangementId, file);
+  }
+
+  /**
+   * Generates a sanitized filename for uploading
+   * @param {SongDetails} songDetails the song details
+   * @param {string} fileType the type of file (e.g., "lead", "vocal")
+   * @returns {string} sanitized filename
+   */
+  _generateFilename(songDetails, fileType) {
+    const sanitizedTitle = songDetails.title.replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "_");
+    return `${sanitizedTitle}-${songDetails.key}-${fileType}.pdf`;
+  }
+
+  /**
+   * Uploads a file to Planning Center"s upload service
+   * @param {Blob} blob the file blob to upload
+   * @param {string} filename the filename to use
+   * @returns {Promise<PlanningCenterFile>} the uploaded file object
+   */
+  async _uploadFile(blob, filename) {
     const formData = new FormData();
     formData.append("file", blob, filename);
 
-    const url = `https://upload.planningcenteronline.com/v2/files`;
-    
+    const url = "https://upload.planningcenteronline.com/v2/files";
+
     const response = await this.gmHttpClient.post(url, null, formData);
     if (response.status < 200 || response.status >= 300) {
-      console.error("Failed to upload leadsheet:", response);
-      throw new Error("Failed to upload leadsheet.");
+      console.error("Failed to upload file:", response);
+      throw new Error(`Failed to upload ${filename}.`);
     }
 
-    console.debug("Leadsheet upload response:", response);
-    
+    console.debug("File upload response:", response);
+
     const json = JSON.parse(response.responseText);
     if (!json.data || json.data.length === 0) {
-      throw new Error("Failed to upload leadsheet.");
+      throw new Error(`Failed to upload ${filename}.`);
     }
 
-    const file = PlanningCenterFile.deserialize(json.data);
-    
-    // Now we need to attach the file to the arrangement
+    return PlanningCenterFile.deserialize(json.data);
+  }
+
+  /**
+   * Attaches an uploaded file to an arrangement
+   * @param {number} songId the planning center song ID
+   * @param {number} arrangementId the arrangement ID
+   * @param {PlanningCenterFile} file the file object from upload
+   * @returns {Promise<Object>} the attachment response
+   */
+  async _attachFileToArrangement(songId, arrangementId, file) {
     const payload = {
       data: {
         type: "Attachment",
@@ -808,11 +896,10 @@ class PlanningCenterAPI {
 
     const attachResponse = await this._postRequest(`/songs/${songId}/arrangements/${arrangementId}/attachments`, payload);
     if (attachResponse.status < 200 || attachResponse.status >= 300) {
-      throw new Error("Failed to attach leadsheet.", attachResponse);
+      throw new Error("Failed to attach file.", attachResponse);
     }
 
-    console.debug("Leadsheet attach response:", attachResponse);
-
+    console.debug("File attach response:", attachResponse);
     return attachResponse;
   }
 
@@ -860,7 +947,7 @@ class App {
   constructor() {
     this.authFlow = new OAuthFlow();
     this.tokenStorage = new TokenStorage();
-    this.planningCenterService = new PlanningCenterAPI();
+    this.planningCenterAPI = new PlanningCenterAPI();
     this.songSelectAPI = new SongSelectAPI();
     this.songFinder = new SongFinder();
   }
@@ -871,14 +958,57 @@ class App {
   }
 
   async importSongToPlanningCenter() {
-    if (!this.isCorrectPage()) {
-      alert("❌ You must be on a song page to use this.");
-      return;
-    }
+    try {
+      if (!this.isCorrectPage()) {
+        alert("❌ You must be on a song page to use this.");
+        return;
+      }
 
+      await this.ensureValidToken();
+
+      const ccliSongId = this.songFinder.getSongId();
+      const existingSong = await this.planningCenterAPI.findSongById(ccliSongId).catch(console.debug);
+
+      // Get song details from CCLI
+      const slug = location.pathname.split("/").pop();
+      const songDetails = await this.songSelectAPI.fetchSongDetails(ccliSongId, slug);
+
+      // If song exists, confirm update; otherwise create new
+      if (existingSong && !await this.confirmSongUpdate()) {
+        return;
+      }
+
+      const songId = existingSong?.id || await this.createNewSong(ccliSongId, songDetails);
+      if (!songId) return;
+
+      // Get or create arrangement
+      const arrangementId = await this.getArrangementId(songId, songDetails);
+      if (!arrangementId) return;
+
+      // Update with ChordPro content
+      if (!await this.updateArrangementWithChordPro(songId, arrangementId, songDetails)) {
+        return;
+      }
+
+      // Ensure key exists
+      await this.ensureArrangementKeyExists(songId, arrangementId, songDetails.key);
+
+      // Upload leadsheet if available
+      await this.uploadLeadsheetIfAvailable(songDetails, songId, arrangementId);
+
+      // Upload vocal sheet if available
+      await this.uploadVocalSheetIfAvailable(songDetails, songId, arrangementId);
+
+      alert("✅ Song has been added to Planning Center!");
+    } catch (error) {
+      console.error("Import failed:", error);
+      alert(`❌ Import failed: ${error.message}`);
+    }
+  }
+
+  async ensureValidToken() {
     if (!this.tokenStorage.isTokenValid) {
       console.debug("Token is invalid or expired. Attempting to refresh...");
-      console.debug(this.authFlow);
       await this.authFlow.refreshToken().catch(err => {
         console.error("Failed to refresh token:", err);
         alert("❌ Could not access Planning Center. Please log in and try again.");
@@ -886,131 +1016,177 @@ class App {
         throw new Error("Aborting import due to user not being logged in.");
       });
     }
+  }
 
-    const ccliSongId = this.songFinder.getSongId();
-    const existingSong = await this.planningCenterService.findSongById(ccliSongId).catch(console.debug);
+  async confirmSongUpdate() {
+    console.info("Song already exists in Planning Center.");
+    return confirm("This song already exists in Planning Center. Do you want to update the default arrangement with the current ChordPro and leadsheet?");
+  }
 
-    let planningCenterSongId;
-    if (existingSong) {
-      console.info("Song already exists in Planning Center.");
-      const confirmOverwrite = confirm("This song already exists in Planning Center. Do you want to update the default arrangement with the current ChordPro and leadsheet?");
-      if (!confirmOverwrite) {
-        console.info("User cancelled the operation.");
-        alert("❌ Operation cancelled.");
-        return;
-      }
-      planningCenterSongId = existingSong.id;
-    } 
-    
-    const slug = location.pathname.split("/").pop();
-    const songDetails = await this.songSelectAPI.fetchSongDetails(ccliSongId, slug);
-
-    if (!existingSong) {
-      try {
-        const createdSong = await this.planningCenterService.addSong(ccliSongId, songDetails);
-        console.info("✅ Song added to Planning Center!");
-        planningCenterSongId = createdSong.id;
-        if (!planningCenterSongId) {
-          console.error("Song ID is missing.");
-          throw new Error("❌ Song ID is missing.");
-        }
-      } catch (error) {
-        console.error("Failed to add song:", error);
-        alert("❌ Failed to add song.");
-        return;
-      }
-    }
-
-    let arrangementId;
+  async createNewSong(ccliSongId, songDetails) {
     try {
-      const existingArrangements = await this.planningCenterService.getArrangements(planningCenterSongId);
+      const createdSong = await this.planningCenterAPI.addSong(ccliSongId, songDetails);
+      console.info("✅ Song added to Planning Center!");
+
+      if (!createdSong.id) {
+        throw new Error("Song ID is missing.");
+      }
+
+      return createdSong.id;
+    } catch (error) {
+      console.error("Failed to add song:", error);
+      alert("❌ Failed to add song.");
+      return null;
+    }
+  }
+
+  async getArrangementId(songId, songDetails) {
+    try {
+      const existingArrangements = await this.planningCenterAPI.getArrangements(songId);
+
       if (!existingArrangements || existingArrangements.length === 0) {
         throw new Error("No arrangements found for this song.");
       }
 
-      arrangementId = existingArrangements[0].id;
+      const arrangementId = existingArrangements[0].id;
+
       if (!arrangementId || !songDetails.key) {
-        throw new Error("❌ Arrangement ID or key is missing.");
+        throw new Error("Arrangement ID or key is missing.");
       }
 
       console.info("✅ Arrangement found in Planning Center!");
+      return arrangementId;
     } catch (err) {
       console.error("Failed to fetch arrangements:", err);
       alert("❌ Failed to fetch arrangements.");
-      return;
+      return null;
     }
+  }
 
-    let chordProResponse;
+  async updateArrangementWithChordPro(songId, arrangementId, songDetails) {
     try {
-      chordProResponse = await this.songSelectAPI.fetchChordProText(songDetails);
+      const chordProResponse = await this.songSelectAPI.fetchChordProText(songDetails);
       console.info("✅ ChordPro text fetched successfully.");
-    } catch (err) {
-      console.error("Failed to fetch ChordPro text:", err);
-      alert("❌ This song does not have a ChordPro file available on CCLI.");
-      return;
-    }
 
-    try {
-      await this.planningCenterService.updateArrangement(
-        planningCenterSongId,
+      await this.planningCenterAPI.updateArrangement(
+        songId,
         arrangementId,
         songDetails.key,
         chordProResponse.toPlanningCenter(),
-        songDetails.bpm,
+        songDetails.bpm
       );
+
       console.info("✅ Arrangement updated in Planning Center!");
+      return true;
+    } catch (err) {
+      console.error("Failed to update arrangement with ChordPro:", err);
+      alert("❌ Failed to update arrangement with ChordPro.");
+      return false;
+    }
+  }
+
+  async ensureArrangementKeyExists(songId, arrangementId, key) {
+    try {
+      const existingKeys = await this.planningCenterAPI.getArrangementKeys(songId, arrangementId);
+
+      if (existingKeys && existingKeys.length > 0) {
+        console.info("Existing keys found in Planning Center.");
+        const existingKey = existingKeys.find(k => k.attributes.starting_key === key);
+
+        if (existingKey) {
+          return existingKey;
+        }
+      }
+
+      console.info("No existing key found. Adding default key...");
+      const newKey = await this.planningCenterAPI.addArrangementKey(songId, arrangementId, key);
+      console.info("✅ Added default key for arrangement:", key);
+      return newKey;
     } catch (error) {
-      console.error("Failed to update arrangement:", error);
-      alert("❌ Failed to update arrangement.");
+      console.warn("Failed to add default key:", error);
+      // Non-fatal error, continue
+      return null;
+    }
+  }
+
+  async uploadLeadsheetIfAvailable(songDetails, songId, arrangementId) {
+    if (!this.isProductAvailable(songDetails.products.lead)) {
+      console.info("Vocal sheet is unavailable for this song.");
       return;
     }
 
-    let existingKey;
-
-    const existingKeys = await this.planningCenterService.getArrangementKeys(planningCenterSongId, arrangementId);
-    if (existingKeys && existingKeys.length > 0) {
-      console.info("Existing keys found in Planning Center.");
-      console.debug("Existing keys:", existingKeys);
-      existingKey = existingKeys.find(key => key.attributes.starting_key === songDetails.key);
-    }
-
-    if (!existingKey) {
-      console.info("No existing key found. Adding default key...");
-      try {
-        existingKey = await this.planningCenterService.addArrangementKey(
-          planningCenterSongId,
-          arrangementId,
-          songDetails.key,
-        );
-        console.info("✅ Added default key for arrangement:", songDetails.key);
-      } catch (error) {
-        console.warn("Failed to add default key:", error);
-      }
-    }
-
-    let leadsheetBlob;
     try {
-      if (!songDetails.products.lead.exists) {
-        throw new Error("This song does not have a leadsheet available on CCLI.");
-      }
-
-      leadsheetBlob = await this.songSelectAPI.downloadLeadsheet(songDetails);
+      const leadsheetBlob = await this.songSelectAPI.downloadLeadsheet(songDetails);
       console.info("✅ Leadsheet downloaded successfully.");
+
+      await this.planningCenterAPI.uploadLeadsheet(
+        songDetails,
+        songId,
+        arrangementId,
+        leadsheetBlob
+      );
+
+      console.info("✅ Leadsheet uploaded successfully.");
     } catch (error) {
-      console.warn("Failed to download leadsheet:", error);
+      console.warn("Failed to handle leadsheet:", error);
+      // Non-fatal error, continue
+    }
+  }
+
+  /**
+   * Uploads a vocal sheet PDF to Planning Center if available
+   * @param {SongDetails} songDetails 
+   * @param {number} songId 
+   * @param {number} arrangementId 
+   * @returns 
+   */
+  async uploadVocalSheetIfAvailable(songDetails, songId, arrangementId) {
+    if (!this.isProductAvailable(songDetails.products.vocal)) {
+      console.info("Vocal sheet is unavailable for this song.");
+      return;
     }
 
-    if (leadsheetBlob) {
-      try {
-        await this.planningCenterService.uploadLeadsheet(songDetails, planningCenterSongId, arrangementId, leadsheetBlob);
-        console.info("✅ Leadsheet uploaded successfully.");
-      } catch (error) {
-        console.error("Failed to upload leadsheet:", error);
-        return;
-      }
+    try {
+      const vocalSheetBlob = await this.songSelectAPI.downloadVocalSheet(songDetails);
+      console.info("✅ Vocal sheet downloaded successfully.");
+
+      await this.planningCenterAPI.uploadVocalSheet(
+        songDetails,
+        songId,
+        arrangementId,
+        vocalSheetBlob
+      );
+
+      console.info("✅ Vocal sheet uploaded successfully.");
+    } catch (error) {
+      console.warn("Failed to handle vocal sheet:", error);
+    }
+  }
+
+  /**
+   * Checks if a song product is available to be downloaded
+   * @param {SongProduct} product 
+   * @returns {boolean} true if the product is available to be downloaded
+   */
+  isProductAvailable(product) {
+    if (!product.exists) {
+      console.debug("No product available for this song.");
+      return false;
     }
 
-    alert("✅ Song has been added to Planning Center!");
+    if (!product.authorized) {
+      console.warn(`Unauthorized to download product: ${product.noAuthReason}`);
+      return false;
+    }
+
+    if (product.exceededMaxUniqueSongCount) {
+      console.warn("Exceeded maximum unique song count.");
+      return false;
+    }
+
+    console.debug("Product is available and authorized.");
+
+    return true;
   }
 
   isCorrectPage() {
