@@ -9,14 +9,242 @@
 // @grant       GM_xmlhttpRequest
 // @grant       GM_registerMenuCommand
 // @grant       GM_download
-// @grant       GM_getResourceText
 // @grant       GM_addStyle
 // @version     0.11.0
 // @author      aux
-// @resource    customCSS https://raw.githubusercontent.com/Auxority/ccli-songselect-to-planning-center/style.css
 // @downloadURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
 // @updateURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
 // ==/UserScript==
+
+GM_addStyle(`
+#ccli-credential-modal, #ccli-confirmation-modal, #ccli-progress-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 999999;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.ccli-modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: ccli-fadeIn 0.2s ease-out;
+  z-index: 1;
+}
+
+.ccli-modal-content {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow: hidden;
+  animation: ccli-slideIn 0.3s ease-out;
+  position: relative;
+  z-index: 2;
+}
+
+.ccli-modal-header {
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ccli-modal-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.ccli-modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #6b7280;
+  padding: 4px;
+  border-radius: 6px;
+  transition: all 0.2s;
+  line-height: 1;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ccli-modal-close:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.ccli-modal-body {
+  padding: 20px 24px;
+}
+
+.ccli-modal-message {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #0c4a6e;
+  white-space: pre-line;
+}
+
+.ccli-form-group {
+  margin-bottom: 20px;
+}
+
+.ccli-form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: #374151;
+  font-size: 14px;
+}
+
+.ccli-form-group input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+}
+
+.ccli-form-group input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.ccli-modal-footer {
+  padding: 16px 24px 24px;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.ccli-btn {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+  display: inline-block;
+  text-align: center;
+  text-decoration: none;
+  user-select: none;
+  vertical-align: middle;
+}
+
+.ccli-btn-primary {
+  background: #3b82f6;
+  color: white;
+}
+
+.ccli-btn-primary:hover {
+  background: #2563eb;
+}
+
+.ccli-btn-secondary {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.ccli-btn-secondary:hover {
+  background: #e5e7eb;
+}
+
+.ccli-progress-container {
+  text-align: center;
+}
+
+.ccli-progress-bar-bg {
+  width: 100%;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.ccli-progress-bar {
+  height: 100%;
+  background: #3b82f6;
+  border-radius: 4px;
+  width: 0%;
+  transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+.ccli-progress-status {
+  font-size: 16px;
+  font-weight: 500;
+  color: #111827;
+  margin-bottom: 8px;
+}
+
+.ccli-progress-details {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 16px;
+}
+
+.ccli-confirmation-content .ccli-modal-body {
+  text-align: center;
+}
+
+.ccli-confirmation-message {
+  font-size: 16px;
+  color: #374151;
+  margin-bottom: 24px;
+  line-height: 1.5;
+}
+
+.ccli-confirmation-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+}
+
+.ccli-confirmation-buttons .ccli-btn {
+  min-width: 100px;
+}
+
+.ccli-btn-danger {
+  background: #dc3545;
+  color: white;
+}
+
+.ccli-btn-danger:hover {
+  background: #c82333;
+}
+
+// ...existing code...
+`);
 
 class IntegerParser {
   /**
@@ -307,22 +535,10 @@ class CredentialModal {
       </div>
     `;
 
-    // Add styles
-    this.addStyles();
-
     // Add event listeners
     this.addEventListeners();
 
     document.body.appendChild(this.modal);
-  }
-
-  addStyles() {
-    if (document.getElementById("ccli-modal-styles")) {
-      return; // Styles already added
-    };
-
-    const css = GM_getResourceText("customCSS");
-    GM_addStyle(css);
   }
 
   addEventListeners() {
@@ -400,6 +616,14 @@ class TokenStorage {
     GM_setValue(TokenStorage.EXPIRES_AT_KEY, Date.now() + tokenData.expires_in * 1000);
   }
 
+  saveClientId(clientId) {
+    GM_setValue(TokenStorage.CLIENT_ID_KEY, clientId);
+  }
+
+  saveClientSecret(clientSecret) {
+    GM_setValue(TokenStorage.CLIENT_SECRET_KEY, clientSecret);
+  }
+
   async promptForCredentials() {
     const instructions = [
       "To use this extension, you need to create a Planning Center API application:",
@@ -408,7 +632,7 @@ class TokenStorage {
       `2. Click "New Application"`,
       `3. Fill in these details:`,
       `   • Name: "CCLI SongSelect Importer" (or any name you prefer)`,
-      `   • Redirect URI: "https://services.planningcenteronline.com/dashboard/0"`,
+      `   • Redirect URI: "${OAuthClient.CONFIG.REDIRECT_URI}"`,
       `4. Click "Submit"`,
       `5. Copy the "Application ID" and "Secret" from the next page`,
       "",
@@ -449,8 +673,8 @@ class TokenStorage {
         return false;
       }
 
-      GM_setValue("client_id", values.clientId.trim());
-      GM_setValue("client_secret", values.clientSecret.trim());
+      TokenStorage.saveClientId(values.clientId.trim());
+      TokenStorage.saveClientSecret(values.clientSecret.trim());
 
       console.info("Client ID and secret have been saved.");
       alert("✅ Credentials saved successfully! You can now import songs from CCLI SongSelect.");
@@ -1116,6 +1340,253 @@ class PlanningCenterAPI {
   }
 }
 
+class ProgressIndicator {
+  constructor() {
+    this.modal = null;
+    this.progressBar = null;
+    this.statusText = null;
+    this.detailsText = null;
+    this.currentStep = 0;
+    this.totalSteps = 0;
+  }
+
+  show(title = "Processing...", totalSteps = 1) {
+    this.totalSteps = totalSteps;
+    this.currentStep = 0;
+    this.createModal(title);
+    this.showModal();
+  }
+
+  updateProgress(step, statusText, detailsText = "") {
+    if (!this.modal) {
+      return;
+    }
+
+    this.currentStep = step;
+    const percentage = Math.round((step / this.totalSteps) * 100);
+
+    this.progressBar.style.width = `${percentage}%`;
+    this.statusText.textContent = statusText;
+    this.detailsText.textContent = detailsText;
+  }
+
+  setError(errorText, detailsText = "") {
+    if (!this.modal) {
+      return;
+    }
+
+    this.progressBar.style.backgroundColor = "#dc3545";
+    this.statusText.textContent = "❌ " + errorText;
+    this.detailsText.textContent = detailsText;
+
+    // Add close button for errors
+    const closeBtn = document.createElement("button");
+    closeBtn.textContent = "Close";
+    closeBtn.className = "ccli-btn ccli-btn-secondary";
+    closeBtn.onclick = () => this.close();
+    this.modal.querySelector(".ccli-modal-footer").appendChild(closeBtn);
+  }
+
+  setSuccess(successText, detailsText = "") {
+    if (!this.modal) {
+      return;
+    }
+
+    this.progressBar.style.width = "100%";
+    this.progressBar.style.backgroundColor = "#28a745";
+    this.statusText.textContent = "✅ " + successText;
+    this.detailsText.textContent = detailsText;
+
+    // Auto-close after 3 seconds
+    setTimeout(() => this.close(), 3000);
+  }
+
+  createModal(title) {
+    this.remove();
+
+    this.modal = document.createElement("div");
+    this.modal.id = "ccli-progress-modal";
+    this.modal.innerHTML = `
+      <div class="ccli-modal-overlay">
+        <div class="ccli-modal-content ccli-progress-content">
+          <div class="ccli-modal-header">
+            <h2>${title}</h2>
+          </div>
+          <div class="ccli-modal-body">
+            <div class="ccli-progress-container">
+              <div class="ccli-progress-bar-bg">
+                <div class="ccli-progress-bar"></div>
+              </div>
+              <div class="ccli-progress-status"></div>
+              <div class="ccli-progress-details"></div>
+            </div>
+          </div>
+          <div class="ccli-modal-footer"></div>
+        </div>
+      </div>
+    `;
+
+    this.progressBar = this.modal.querySelector(".ccli-progress-bar");
+    this.statusText = this.modal.querySelector(".ccli-progress-status");
+    this.detailsText = this.modal.querySelector(".ccli-progress-details");
+
+    document.body.appendChild(this.modal);
+  }
+
+  showModal() {
+    this.modal.style.display = "block";
+  }
+
+  close() {
+    this.remove();
+  }
+
+  remove() {
+    if (this.modal) {
+      this.modal.remove();
+      this.modal = null;
+    }
+  }
+}
+
+class ConfirmationModal {
+  constructor() {
+    this.modal = null;
+    this.resolvePromise = null;
+    this.escapeHandler = null;
+    this.enterHandler = null;
+  }
+
+  /**
+   * Shows a custom confirmation dialog
+   * @param {string} title - Modal title
+   * @param {string} message - Confirmation message
+   * @param {string} confirmText - Text for confirm button (default: "Confirm")
+   * @param {string} cancelText - Text for cancel button (default: "Cancel")
+   * @param {string} confirmType - Button type: "primary", "danger" (default: "primary")
+   * @returns {Promise<boolean>} - Promise that resolves with true/false
+   */
+  show(title, message, confirmText = "Confirm", cancelText = "Cancel", confirmType = "primary") {
+    return new Promise((resolve) => {
+      this.resolvePromise = resolve;
+      this.createModal(title, message, confirmText, cancelText, confirmType);
+      this.showModal();
+    });
+  }
+
+  createModal(title, message, confirmText, cancelText, confirmType) {
+    this.remove();
+
+    this.modal = document.createElement("div");
+    this.modal.id = "ccli-confirmation-modal";
+    this.modal.innerHTML = `
+      <div class="ccli-modal-overlay">
+        <div class="ccli-modal-content ccli-confirmation-content">
+          <div class="ccli-modal-header">
+            <h2>${title}</h2>
+            <button class="ccli-modal-close">&times;</button>
+          </div>
+          <div class="ccli-modal-body">
+            <div class="ccli-confirmation-message">${message}</div>
+            <div class="ccli-confirmation-buttons">
+              <button type="button" class="ccli-btn ccli-btn-secondary" id="ccli-confirm-cancel">${cancelText}</button>
+              <button type="button" class="ccli-btn ccli-btn-${confirmType}" id="ccli-confirm-ok">${confirmText}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    this.addEventListeners();
+    document.body.appendChild(this.modal);
+  }
+
+  addEventListeners() {
+    // Store references for proper cleanup
+    this.escapeHandler = (e) => {
+      if (e.key === "Escape" && this.modal) {
+        e.preventDefault();
+        this.close(false);
+      }
+    };
+
+    this.enterHandler = (e) => {
+      if (e.key === "Enter" && this.modal) {
+        e.preventDefault();
+        this.close(true);
+      }
+    };
+
+    // Close button
+    this.modal.querySelector(".ccli-modal-close").addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.close(false);
+    });
+
+    // Cancel button
+    this.modal.querySelector("#ccli-confirm-cancel").addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.close(false);
+    });
+
+    // Confirm button
+    this.modal.querySelector("#ccli-confirm-ok").addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.close(true);
+    });
+
+    // Overlay click
+    this.modal.querySelector(".ccli-modal-overlay").addEventListener("click", (e) => {
+      if (e.target === e.currentTarget) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.close(false);
+      }
+    });
+
+    // Keyboard events
+    document.addEventListener("keydown", this.escapeHandler);
+    document.addEventListener("keydown", this.enterHandler);
+  }
+
+  showModal() {
+    this.modal.style.display = "block";
+    // Focus confirm button
+    setTimeout(() => {
+      const confirmButton = this.modal.querySelector("#ccli-confirm-ok");
+      if (confirmButton) confirmButton.focus();
+    }, 100);
+  }
+
+  close(result) {
+    if (this.resolvePromise) {
+      this.resolvePromise(result);
+      this.resolvePromise = null;
+    }
+    this.remove();
+  }
+
+  remove() {
+    if (this.modal) {
+      // Clean up event listeners
+      if (this.escapeHandler) {
+        document.removeEventListener("keydown", this.escapeHandler);
+        this.escapeHandler = null;
+      }
+      if (this.enterHandler) {
+        document.removeEventListener("keydown", this.enterHandler);
+        this.enterHandler = null;
+      }
+      
+      this.modal.remove();
+      this.modal = null;
+    }
+  }
+}
+
 class App {
   constructor() {
     this.authFlow = new OAuthFlow();
@@ -1123,6 +1594,8 @@ class App {
     this.planningCenterAPI = new PlanningCenterAPI();
     this.songSelectAPI = new SongSelectAPI();
     this.songFinder = new SongFinder();
+    this.progressIndicator = new ProgressIndicator();
+    this.confirmationModal = new ConfirmationModal();
   }
 
   run() {
@@ -1131,6 +1604,8 @@ class App {
   }
 
   async importSongToPlanningCenter() {
+    let progress = null;
+
     try {
       if (!this.isCorrectPage()) {
         alert([
@@ -1153,18 +1628,16 @@ class App {
       // Handle login if needed
       if (!this.tokenStorage.isTokenValid) {
         if (!this.tokenStorage.refreshToken) {
-          // Need fresh login
           alert([
             "🔐 Authentication Required",
             "",
-            `You"ll be redirected to Planning Center to log in.`,
+            `You'll be redirected to Planning Center to log in.`,
             `After logging in, please try importing the song again.`
           ].join("\n"));
           this.authFlow.startLogin();
           return;
         }
 
-        // Try to refresh token
         try {
           await this.authFlow.refreshToken();
         } catch (err) {
@@ -1172,7 +1645,7 @@ class App {
           alert([
             "🔐 Login Required",
             "",
-            `Your session has expired. You"ll be redirected to Planning Center to log in again.`,
+            `Your session has expired. You'll be redirected to Planning Center to log in again.`,
             "After logging in, please try importing the song again."
           ].join("\n"));
           this.authFlow.startLogin();
@@ -1180,63 +1653,103 @@ class App {
         }
       }
 
-      // Continue with import process
-      const ccliSongId = this.songFinder.getSongId();
-      const existingSong = await this.planningCenterAPI.findSongById(ccliSongId).catch(console.debug);
+      // Start progress indicator
+      progress = this.progressIndicator;
+      progress.show("Importing Song to Planning Center", 7);
 
-      // Get song details from CCLI
+      // Step 1: Get song details
+      progress.updateProgress(1, "Getting song information...", "Reading CCLI song data");
+      const ccliSongId = this.songFinder.getSongId();
       const slug = location.pathname.split("/").pop();
       const songDetails = await this.songSelectAPI.fetchSongDetails(ccliSongId, slug);
 
-      // If song exists, confirm update; otherwise create new
+      // Step 2: Check if song exists
+      progress.updateProgress(2, "Checking Planning Center...", "Looking for existing song");
+      const existingSong = await this.planningCenterAPI.findSongById(ccliSongId).catch(console.debug);
+
       if (existingSong && !await this.confirmSongUpdate()) {
+        progress.close();
         return;
       }
 
-      const songId = existingSong?.id || await this.createNewSong(ccliSongId, songDetails);
-      if (!songId) return;
+      // Step 3: Create or get song
+      let songId;
+      if (existingSong) {
+        progress.updateProgress(3, "Using existing song...", `Found: ${songDetails.title}`);
+        songId = existingSong.id;
+      } else {
+        progress.updateProgress(3, "Creating new song...", `Adding: ${songDetails.title}`);
+        songId = await this.createNewSong(ccliSongId, songDetails);
+        if (!songId) {
+          progress.setError("Failed to create song", "Could not add song to Planning Center");
+          return;
+        }
+      }
 
-      // Get or create arrangement
+      // Step 4: Get arrangement
+      progress.updateProgress(4, "Setting up arrangement...", "Configuring song structure");
       const arrangementId = await this.getArrangementId(songId, songDetails);
-      if (!arrangementId) return;
-
-      // Update with ChordPro content
-      if (!await this.updateArrangementWithChordPro(songId, arrangementId, songDetails)) {
+      if (!arrangementId) {
+        progress.setError("Failed to get arrangement", "Could not access song arrangement");
         return;
       }
 
-      // Ensure key exists
+      // Step 5: Update with ChordPro
+      progress.updateProgress(5, "Downloading ChordPro...", "Getting chord charts from CCLI");
+      if (!await this.updateArrangementWithChordPro(songId, arrangementId, songDetails)) {
+        progress.setError("Failed to update chords", "Could not download or apply chord chart");
+        return;
+      }
+
+      // Step 6: Setup keys
+      progress.updateProgress(6, "Setting up keys...", `Configuring key: ${songDetails.key}`);
       await this.ensureArrangementKeyExists(songId, arrangementId, songDetails.key);
 
-      // Upload leadsheet if available
+      // Step 7: Upload additional files
+      progress.updateProgress(7, "Uploading additional files...", "Adding leadsheets and vocal sheets");
       await this.uploadLeadsheetIfAvailable(songDetails, songId, arrangementId);
-
-      // Upload vocal sheet if available
       await this.uploadVocalSheetIfAvailable(songDetails, songId, arrangementId);
 
-      alert("✅ Song has been added to Planning Center!");
+      progress.setSuccess("Song imported successfully!", `${songDetails.title} is now available in Planning Center`);
+
     } catch (error) {
       console.error("Import failed:", error);
 
-      // Provide more helpful error messages
-      let userMessage = "❌ Import failed: ";
+      let errorMessage = "Import failed";
+      let errorDetails = error.message;
+
       if (error.message.includes("No song found")) {
-        userMessage += "This song is not in your Planning Center library yet, but the import will create it.";
+        errorMessage = "Song not found";
+        errorDetails = "This song is not in your Planning Center library yet, but the import will create it.";
       } else if (error.message.includes("401") || error.message.includes("Unauthorized")) {
-        userMessage += "Authentication failed. Please try the import again to re-authenticate.";
+        errorMessage = "Authentication failed";
+        errorDetails = "Please try the import again to re-authenticate.";
       } else if (error.message.includes("403") || error.message.includes("Forbidden")) {
-        userMessage += `You don"t have permission to add songs to Planning Center. Please check with your administrator.`;
-      } else {
-        userMessage += error.message;
+        errorMessage = "Permission denied";
+        errorDetails = "You don't have permission to add songs to Planning Center. Please check with your administrator.";
       }
 
-      alert(userMessage);
+      if (progress) {
+        progress.setError(errorMessage, errorDetails);
+      } else {
+        alert(`❌ ${errorMessage}: ${errorDetails}`);
+      }
     }
   }
 
   async confirmSongUpdate() {
     console.info("Song already exists in Planning Center.");
-    return confirm("This song already exists in Planning Center. Do you want to update the default arrangement with the current ChordPro and leadsheet?");
+    
+    const title = "Song Already Exists";
+    const message = "This song already exists in Planning Center. Do you want to update the default arrangement with the current ChordPro and leadsheet?";
+    
+    return await this.confirmationModal.show(
+      title,
+      message,
+      "Update Song",
+      "Cancel",
+      "primary"
+    );
   }
 
   async createNewSong(ccliSongId, songDetails) {
@@ -1251,8 +1764,7 @@ class App {
       return createdSong.id;
     } catch (error) {
       console.error("Failed to add song:", error);
-      alert("❌ Failed to add song.");
-      return null;
+      throw new Error("Failed to add song to Planning Center");
     }
   }
 
@@ -1274,8 +1786,7 @@ class App {
       return arrangementId;
     } catch (err) {
       console.error("Failed to fetch arrangements:", err);
-      alert("❌ Failed to fetch arrangements.");
-      return null;
+      throw new Error("Failed to fetch song arrangements");
     }
   }
 
@@ -1296,8 +1807,7 @@ class App {
       return true;
     } catch (err) {
       console.error("Failed to update arrangement with ChordPro:", err);
-      alert("❌ Failed to update arrangement with ChordPro.");
-      return false;
+      throw new Error("Failed to update arrangement with ChordPro");
     }
   }
 
