@@ -197,6 +197,18 @@ GM_addStyle(`
   transition: width 0.3s ease, background-color 0.3s ease;
 }
 
+.ccli-progress-bar.error {
+  background-color: #dc3545;
+}
+
+.ccli-progress-bar.success {
+  background-color: #28a745;
+}
+
+.ccli-progress-bar.complete {
+  width: 100%;
+}
+
 .ccli-progress-status {
   font-size: 16px;
   font-weight: 500;
@@ -243,7 +255,13 @@ GM_addStyle(`
   background: #c82333;
 }
 
-// ...existing code...
+.ccli-modal-hidden {
+  display: none;
+}
+
+.ccli-modal-visible {
+  display: block;
+}
 `);
 
 class IntegerParser {
@@ -578,7 +596,8 @@ class CredentialModal {
   }
 
   showModal() {
-    this.modal.style.display = "block";
+    this.modal.classList.remove('ccli-modal-hidden');
+    this.modal.classList.add('ccli-modal-visible');
     // Focus first input
     setTimeout(() => {
       const firstInput = this.modal.querySelector("input");
@@ -1365,6 +1384,8 @@ class ProgressIndicator {
     this.currentStep = step;
     const percentage = Math.round((step / this.totalSteps) * 100);
 
+    // Remove any state classes and update width
+    this.progressBar.classList.remove('error', 'success', 'complete');
     this.progressBar.style.width = `${percentage}%`;
     this.statusText.textContent = statusText;
     this.detailsText.textContent = detailsText;
@@ -1375,7 +1396,7 @@ class ProgressIndicator {
       return;
     }
 
-    this.progressBar.style.backgroundColor = "#dc3545";
+    this.progressBar.classList.add('error');
     this.statusText.textContent = "❌ " + errorText;
     this.detailsText.textContent = detailsText;
 
@@ -1392,8 +1413,7 @@ class ProgressIndicator {
       return;
     }
 
-    this.progressBar.style.width = "100%";
-    this.progressBar.style.backgroundColor = "#28a745";
+    this.progressBar.classList.add('success', 'complete');
     this.statusText.textContent = "✅ " + successText;
     this.detailsText.textContent = detailsText;
 
@@ -1434,7 +1454,8 @@ class ProgressIndicator {
   }
 
   showModal() {
-    this.modal.style.display = "block";
+    this.modal.classList.remove('ccli-modal-hidden');
+    this.modal.classList.add('ccli-modal-visible');
   }
 
   close() {
@@ -1553,7 +1574,8 @@ class ConfirmationModal {
   }
 
   showModal() {
-    this.modal.style.display = "block";
+    this.modal.classList.remove('ccli-modal-hidden');
+    this.modal.classList.add('ccli-modal-visible');
     // Focus confirm button
     setTimeout(() => {
       const confirmButton = this.modal.querySelector("#ccli-confirm-ok");
