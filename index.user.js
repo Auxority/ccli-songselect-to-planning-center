@@ -245,6 +245,300 @@ class SongSelectAPI {
   }
 }
 
+class CredentialModal {
+  constructor() {
+    this.modal = null;
+    this.resolvePromise = null;
+  }
+
+  /**
+   * Shows a custom modal for credential input
+   * @param {string} title - Modal title
+   * @param {string} message - Instructions message
+   * @param {Array} fields - Array of field objects {id, label, type, placeholder}
+   * @returns {Promise<Object>} - Promise that resolves with field values
+   */
+  show(title, message, fields) {
+    return new Promise((resolve, reject) => {
+      this.resolvePromise = resolve;
+      this.createModal(title, message, fields);
+      this.showModal();
+    });
+  }
+
+  createModal(title, message, fields) {
+    // Remove existing modal if any
+    this.remove();
+
+    this.modal = document.createElement('div');
+    this.modal.id = 'ccli-credential-modal';
+    this.modal.innerHTML = `
+      <div class="ccli-modal-overlay">
+        <div class="ccli-modal-content">
+          <div class="ccli-modal-header">
+            <h2>${title}</h2>
+            <button class="ccli-modal-close">&times;</button>
+          </div>
+          <div class="ccli-modal-body">
+            <div class="ccli-modal-message">${message}</div>
+            <form class="ccli-modal-form" id="ccli-credential-form">
+              ${fields.map(field => `
+                <div class="ccli-form-group">
+                  <label for="${field.id}">${field.label}</label>
+                  <input 
+                    type="${field.type || 'text'}" 
+                    id="${field.id}" 
+                    name="${field.id}"
+                    placeholder="${field.placeholder || ''}"
+                    required
+                  />
+                </div>
+              `).join('')}
+            </form>
+          </div>
+          <div class="ccli-modal-footer">
+            <button type="button" class="ccli-btn ccli-btn-secondary" id="ccli-modal-cancel">Cancel</button>
+            <button type="submit" form="ccli-credential-form" class="ccli-btn ccli-btn-primary">Save Credentials</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Add styles
+    this.addStyles();
+    
+    // Add event listeners
+    this.addEventListeners();
+
+    document.body.appendChild(this.modal);
+  }
+
+  addStyles() {
+    if (document.getElementById('ccli-modal-styles')) return;
+
+    const styles = document.createElement('style');
+    styles.id = 'ccli-modal-styles';
+    styles.textContent = `
+      #ccli-credential-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 10000;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+
+      .ccli-modal-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        animation: ccli-fadeIn 0.2s ease-out;
+      }
+
+      .ccli-modal-content {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        width: 90%;
+        max-width: 500px;
+        max-height: 90vh;
+        overflow: hidden;
+        animation: ccli-slideIn 0.3s ease-out;
+      }
+
+      .ccli-modal-header {
+        padding: 24px 24px 16px;
+        border-bottom: 1px solid #e5e7eb;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .ccli-modal-header h2 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 600;
+        color: #111827;
+      }
+
+      .ccli-modal-close {
+        background: none;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+        color: #6b7280;
+        padding: 4px;
+        border-radius: 6px;
+        transition: all 0.2s;
+      }
+
+      .ccli-modal-close:hover {
+        background: #f3f4f6;
+        color: #374151;
+      }
+
+      .ccli-modal-body {
+        padding: 20px 24px;
+      }
+
+      .ccli-modal-message {
+        background: #f0f9ff;
+        border: 1px solid #bae6fd;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 20px;
+        font-size: 14px;
+        line-height: 1.5;
+        color: #0c4a6e;
+        white-space: pre-line;
+      }
+
+      .ccli-form-group {
+        margin-bottom: 20px;
+      }
+
+      .ccli-form-group label {
+        display: block;
+        margin-bottom: 6px;
+        font-weight: 500;
+        color: #374151;
+        font-size: 14px;
+      }
+
+      .ccli-form-group input {
+        width: 100%;
+        padding: 12px 16px;
+        border: 2px solid #d1d5db;
+        border-radius: 8px;
+        font-size: 14px;
+        transition: border-color 0.2s, box-shadow 0.2s;
+        box-sizing: border-box;
+      }
+
+      .ccli-form-group input:focus {
+        outline: none;
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+      }
+
+      .ccli-modal-footer {
+        padding: 16px 24px 24px;
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+      }
+
+      .ccli-btn {
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        border: none;
+      }
+
+      .ccli-btn-primary {
+        background: #3b82f6;
+        color: white;
+      }
+
+      .ccli-btn-primary:hover {
+        background: #2563eb;
+      }
+
+      .ccli-btn-secondary {
+        background: #f3f4f6;
+        color: #374151;
+        border: 1px solid #d1d5db;
+      }
+
+      .ccli-btn-secondary:hover {
+        background: #e5e7eb;
+      }
+
+      @keyframes ccli-fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+
+      @keyframes ccli-slideIn {
+        from { transform: translateY(-20px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+    `;
+    document.head.appendChild(styles);
+  }
+
+  addEventListeners() {
+    // Close button
+    this.modal.querySelector('.ccli-modal-close').addEventListener('click', () => {
+      this.close(null);
+    });
+
+    // Cancel button
+    this.modal.querySelector('#ccli-modal-cancel').addEventListener('click', () => {
+      this.close(null);
+    });
+
+    // Overlay click
+    this.modal.querySelector('.ccli-modal-overlay').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) {
+        this.close(null);
+      }
+    });
+
+    // Form submission
+    this.modal.querySelector('#ccli-credential-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const values = Object.fromEntries(formData.entries());
+      this.close(values);
+    });
+
+    // Escape key
+    document.addEventListener('keydown', this.handleEscapeKey.bind(this));
+  }
+
+  handleEscapeKey(e) {
+    if (e.key === 'Escape' && this.modal) {
+      this.close(null);
+    }
+  }
+
+  showModal() {
+    this.modal.style.display = 'block';
+    // Focus first input
+    setTimeout(() => {
+      const firstInput = this.modal.querySelector('input');
+      if (firstInput) firstInput.focus();
+    }, 100);
+  }
+
+  close(values) {
+    if (this.resolvePromise) {
+      this.resolvePromise(values);
+      this.resolvePromise = null;
+    }
+    this.remove();
+  }
+
+  remove() {
+    if (this.modal) {
+      document.removeEventListener('keydown', this.handleEscapeKey.bind(this));
+      this.modal.remove();
+      this.modal = null;
+    }
+  }
+}
+
 class TokenStorage {
   static ACCESS_TOKEN_KEY = "access_token";
   static REFRESH_TOKEN_KEY = "refresh_token";
@@ -258,43 +552,66 @@ class TokenStorage {
     GM_setValue(TokenStorage.EXPIRES_AT_KEY, Date.now() + tokenData.expires_in * 1000);
   }
 
-  promptForCredentials() {
-    const validId = this._promptForClientId();
-    const validSecret = this._promptForClientSecret();
+  async promptForCredentials() {
+    const instructions = [
+      "To use this extension, you need to create a Planning Center API application:",
+      "",
+      "1. Go to: https://api.planningcenteronline.com/oauth/applications",
+      "2. Click 'New Application'", 
+      "3. Fill in these details:",
+      "   • Name: 'CCLI SongSelect Importer' (or any name you prefer)",
+      "   • Redirect URI: 'https://services.planningcenteronline.com/dashboard/0'",
+      "4. Click 'Submit'",
+      "5. Copy the 'Application ID' and 'Secret' from the next page",
+      "",
+      "You only need to do this once."
+    ].join("\n");
 
-    if (validId && validSecret) {
+    const modal = new CredentialModal();
+    
+    const fields = [
+      {
+        id: 'clientId',
+        label: 'Planning Center Application ID',
+        type: 'text',
+        placeholder: 'Long string of letters and numbers...'
+      },
+      {
+        id: 'clientSecret', 
+        label: 'Planning Center Application Secret',
+        type: 'password',
+        placeholder: 'Long string of letters and numbers...'
+      }
+    ];
+
+    try {
+      const values = await modal.show('Setup Planning Center Credentials', instructions, fields);
+      
+      if (!values) {
+        return false; // User cancelled
+      }
+
+      if (!values.clientId || !values.clientId.trim()) {
+        alert("❌ Application ID is required. Please try again.");
+        return false;
+      }
+
+      if (!values.clientSecret || !values.clientSecret.trim()) {
+        alert("❌ Application Secret is required. Please try again.");
+        return false;
+      }
+
+      GM_setValue("client_id", values.clientId.trim());
+      GM_setValue("client_secret", values.clientSecret.trim());
+      
       console.info("Client ID and secret have been saved.");
-      alert("✅ Credentials saved.");
-      return;
+      alert("✅ Credentials saved successfully! You can now import songs from CCLI SongSelect.");
+      return true;
+
+    } catch (error) {
+      console.error("Error in credential prompt:", error);
+      return false;
     }
-  }
-
-  _promptForClientId() {
-    const id = prompt("Please enter your Planning Center client ID:");
-    if (!id || id.trim() === "") {
-      console.error("Client ID cannot be empty.");
-      alert("❌ Client ID cannot be empty.");
-      return;
-    }
-
-    GM_setValue("client_id", id.trim());
-    console.debug("Client ID has been saved.");
-
-    return true;
-  }
-
-  _promptForClientSecret() {
-    const secret = prompt("Please enter your Planning Center client secret:");
-    if (!secret || secret.trim() === "") {
-      console.error("Client secret cannot be empty.");
-      alert("❌ Client secret cannot be empty.");
-      return;
-    }
-
-    GM_setValue("client_secret", secret.trim());
-    console.debug("Client secret has been saved.");
-
-    return true;
   }
 
   get accessToken() {
@@ -478,10 +795,6 @@ class OAuthFlow {
   }
 
   init() {
-    if (!this.tokenStorage.hasCredentials) {
-      this.tokenStorage.promptForCredentials();
-    }
-
     console.debug(`Window location: ${window.location.href}`);
 
     if (window.location.href.startsWith(OAuthClient.CONFIG.REDIRECT_URI)) {
@@ -502,9 +815,22 @@ class OAuthFlow {
   startLogin() {
     const popup = window.open(this.client.authUrl, "oauthPopup", this.popupFeatures);
     if (!popup || popup.closed || typeof popup.closed === "undefined") {
-      console.error(`Popup blocked! Please allow popups for this site.`);
-      alert("❌ Popup blocked! Please allow popups for this site.");
+      const message = [
+        "❌ Popup was blocked!",
+        "",
+        "To use this extension:",
+        "1. Allow popups for songselect.ccli.com",
+        "2. Try the import again",
+        "",
+        "The popup is needed to securely connect to Planning Center."
+      ].join("\n");
+      alert(message);
+      console.error("Popup blocked! Please allow popups for this site.");
+      return;
     }
+
+    // Show user feedback that login is in progress
+    console.info("🔐 Opening Planning Center login...");
   }
 
   _handleRedirect() {
@@ -530,7 +856,8 @@ class OAuthFlow {
     }
 
     this.tokenStorage.saveToken(event.data);
-    console.info("✅ Token received and stored.");
+    console.info("✅ Successfully connected to Planning Center!");
+    alert("✅ Successfully connected to Planning Center! You can now import songs.");
   }
 
   get popupFeatures() {
@@ -958,12 +1285,54 @@ class App {
   async importSongToPlanningCenter() {
     try {
       if (!this.isCorrectPage()) {
-        alert("❌ You must be on a song page to use this.");
+        alert([
+          "❌ Wrong page!",
+          "",
+          "Please navigate to a song page on CCLI SongSelect first.",
+          "The URL should look like: https://songselect.ccli.com/songs/1234567/song-title"
+        ].join("\n"));
         return;
       }
 
-      await this.ensureValidToken();
+      // Handle credentials setup if needed
+      if (!this.tokenStorage.hasCredentials) {
+        const success = await this.tokenStorage.promptForCredentials();
+        if (!success) {
+          return; // User cancelled setup
+        }
+      }
 
+      // Handle login if needed
+      if (!this.tokenStorage.isTokenValid) {
+        if (!this.tokenStorage.refreshToken) {
+          // Need fresh login
+          alert([
+            "🔐 Authentication Required",
+            "",
+            "You'll be redirected to Planning Center to log in.",
+            "After logging in, please try importing the song again."
+          ].join("\n"));
+          this.authFlow.startLogin();
+          return;
+        }
+        
+        // Try to refresh token
+        try {
+          await this.authFlow.refreshToken();
+        } catch (err) {
+          console.error("Failed to refresh token:", err);
+          alert([
+            "🔐 Login Required",
+            "",
+            "Your session has expired. You'll be redirected to Planning Center to log in again.",
+            "After logging in, please try importing the song again."
+          ].join("\n"));
+          this.authFlow.startLogin();
+          return;
+        }
+      }
+
+      // Continue with import process
       const ccliSongId = this.songFinder.getSongId();
       const existingSong = await this.planningCenterAPI.findSongById(ccliSongId).catch(console.debug);
 
@@ -1000,19 +1369,20 @@ class App {
       alert("✅ Song has been added to Planning Center!");
     } catch (error) {
       console.error("Import failed:", error);
-      alert(`❌ Import failed: ${error.message}`);
-    }
-  }
-
-  async ensureValidToken() {
-    if (!this.tokenStorage.isTokenValid) {
-      console.debug("Token is invalid or expired. Attempting to refresh...");
-      await this.authFlow.refreshToken().catch(err => {
-        console.error("Failed to refresh token:", err);
-        alert("❌ Could not access Planning Center. Please log in and try again.");
-        this.authFlow.startLogin();
-        throw new Error("Aborting import due to user not being logged in.");
-      });
+      
+      // Provide more helpful error messages
+      let userMessage = "❌ Import failed: ";
+      if (error.message.includes("No song found")) {
+        userMessage += "This song is not in your Planning Center library yet, but the import will create it.";
+      } else if (error.message.includes("401") || error.message.includes("Unauthorized")) {
+        userMessage += "Authentication failed. Please try the import again to re-authenticate.";
+      } else if (error.message.includes("403") || error.message.includes("Forbidden")) {
+        userMessage += "You don't have permission to add songs to Planning Center. Please check with your administrator.";
+      } else {
+        userMessage += error.message;
+      }
+      
+      alert(userMessage);
     }
   }
 
