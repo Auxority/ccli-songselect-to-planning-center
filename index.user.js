@@ -9,8 +9,11 @@
 // @grant       GM_xmlhttpRequest
 // @grant       GM_registerMenuCommand
 // @grant       GM_download
-// @version     0.10.0
+// @grant       GM_getResourceText
+// @grant       GM_addStyle
+// @version     0.11.0
 // @author      aux
+// @resource    customCSS https://raw.githubusercontent.com/Auxority/ccli-songselect-to-planning-center/style.css
 // @downloadURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
 // @updateURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
 // ==/UserScript==
@@ -306,7 +309,7 @@ class CredentialModal {
 
     // Add styles
     this.addStyles();
-    
+
     // Add event listeners
     this.addEventListeners();
 
@@ -314,167 +317,12 @@ class CredentialModal {
   }
 
   addStyles() {
-    if (document.getElementById('ccli-modal-styles')) return;
+    if (document.getElementById('ccli-modal-styles')) {
+      return; // Styles already added
+    };
 
-    const styles = document.createElement('style');
-    styles.id = 'ccli-modal-styles';
-    styles.textContent = `
-      #ccli-credential-modal {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        z-index: 10000;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      }
-
-      .ccli-modal-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.6);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        animation: ccli-fadeIn 0.2s ease-out;
-      }
-
-      .ccli-modal-content {
-        background: white;
-        border-radius: 12px;
-        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-        width: 90%;
-        max-width: 500px;
-        max-height: 90vh;
-        overflow: hidden;
-        animation: ccli-slideIn 0.3s ease-out;
-      }
-
-      .ccli-modal-header {
-        padding: 24px 24px 16px;
-        border-bottom: 1px solid #e5e7eb;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-
-      .ccli-modal-header h2 {
-        margin: 0;
-        font-size: 20px;
-        font-weight: 600;
-        color: #111827;
-      }
-
-      .ccli-modal-close {
-        background: none;
-        border: none;
-        font-size: 24px;
-        cursor: pointer;
-        color: #6b7280;
-        padding: 4px;
-        border-radius: 6px;
-        transition: all 0.2s;
-      }
-
-      .ccli-modal-close:hover {
-        background: #f3f4f6;
-        color: #374151;
-      }
-
-      .ccli-modal-body {
-        padding: 20px 24px;
-      }
-
-      .ccli-modal-message {
-        background: #f0f9ff;
-        border: 1px solid #bae6fd;
-        border-radius: 8px;
-        padding: 16px;
-        margin-bottom: 20px;
-        font-size: 14px;
-        line-height: 1.5;
-        color: #0c4a6e;
-        white-space: pre-line;
-      }
-
-      .ccli-form-group {
-        margin-bottom: 20px;
-      }
-
-      .ccli-form-group label {
-        display: block;
-        margin-bottom: 6px;
-        font-weight: 500;
-        color: #374151;
-        font-size: 14px;
-      }
-
-      .ccli-form-group input {
-        width: 100%;
-        padding: 12px 16px;
-        border: 2px solid #d1d5db;
-        border-radius: 8px;
-        font-size: 14px;
-        transition: border-color 0.2s, box-shadow 0.2s;
-        box-sizing: border-box;
-      }
-
-      .ccli-form-group input:focus {
-        outline: none;
-        border-color: #3b82f6;
-        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-      }
-
-      .ccli-modal-footer {
-        padding: 16px 24px 24px;
-        display: flex;
-        gap: 12px;
-        justify-content: flex-end;
-      }
-
-      .ccli-btn {
-        padding: 10px 20px;
-        border-radius: 8px;
-        font-size: 14px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.2s;
-        border: none;
-      }
-
-      .ccli-btn-primary {
-        background: #3b82f6;
-        color: white;
-      }
-
-      .ccli-btn-primary:hover {
-        background: #2563eb;
-      }
-
-      .ccli-btn-secondary {
-        background: #f3f4f6;
-        color: #374151;
-        border: 1px solid #d1d5db;
-      }
-
-      .ccli-btn-secondary:hover {
-        background: #e5e7eb;
-      }
-
-      @keyframes ccli-fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
-
-      @keyframes ccli-slideIn {
-        from { transform: translateY(-20px); opacity: 0; }
-        to { transform: translateY(0); opacity: 1; }
-      }
-    `;
-    document.head.appendChild(styles);
+    const css = GM_getResourceText("customCSS");
+    GM_addStyle(css);
   }
 
   addEventListeners() {
@@ -557,7 +405,7 @@ class TokenStorage {
       "To use this extension, you need to create a Planning Center API application:",
       "",
       "1. Go to: https://api.planningcenteronline.com/oauth/applications",
-      "2. Click 'New Application'", 
+      "2. Click 'New Application'",
       "3. Fill in these details:",
       "   • Name: 'CCLI SongSelect Importer' (or any name you prefer)",
       "   • Redirect URI: 'https://services.planningcenteronline.com/dashboard/0'",
@@ -568,7 +416,7 @@ class TokenStorage {
     ].join("\n");
 
     const modal = new CredentialModal();
-    
+
     const fields = [
       {
         id: 'clientId',
@@ -577,7 +425,7 @@ class TokenStorage {
         placeholder: 'Long string of letters and numbers...'
       },
       {
-        id: 'clientSecret', 
+        id: 'clientSecret',
         label: 'Planning Center Application Secret',
         type: 'password',
         placeholder: 'Long string of letters and numbers...'
@@ -586,7 +434,7 @@ class TokenStorage {
 
     try {
       const values = await modal.show('Setup Planning Center Credentials', instructions, fields);
-      
+
       if (!values) {
         return false; // User cancelled
       }
@@ -603,7 +451,7 @@ class TokenStorage {
 
       GM_setValue("client_id", values.clientId.trim());
       GM_setValue("client_secret", values.clientSecret.trim());
-      
+
       console.info("Client ID and secret have been saved.");
       alert("✅ Credentials saved successfully! You can now import songs from CCLI SongSelect.");
       return true;
@@ -1315,7 +1163,7 @@ class App {
           this.authFlow.startLogin();
           return;
         }
-        
+
         // Try to refresh token
         try {
           await this.authFlow.refreshToken();
@@ -1369,7 +1217,7 @@ class App {
       alert("✅ Song has been added to Planning Center!");
     } catch (error) {
       console.error("Import failed:", error);
-      
+
       // Provide more helpful error messages
       let userMessage = "❌ Import failed: ";
       if (error.message.includes("No song found")) {
@@ -1381,7 +1229,7 @@ class App {
       } else {
         userMessage += error.message;
       }
-      
+
       alert(userMessage);
     }
   }
