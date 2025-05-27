@@ -655,7 +655,7 @@ class TokenStorage {
       `4. Click "Submit"`,
       `5. Copy the "Application ID" and "Secret" from the next page`,
       "",
-      "You only need to do this once."
+      "After saving, you'll be redirected to Planning Center to authorize the application."
     ].join("\n");
 
     const modal = new CredentialModal();
@@ -692,11 +692,61 @@ class TokenStorage {
         return false;
       }
 
+      this.saveClientId(values.clientId.trim());
+      this.saveClientSecret(values.clientSecret.trim());
+
+      console.info("Client ID and secret have been saved.");
+      
+      return true;
+
+    } catch (error) {
+      console.error("Error in credential prompt:", error);
+      return false;
+    }
+  }
+
+  async promptForReAuthentication() {
+    const modal = new CredentialModal();
+
+    const fields = [
+      {
+        id: "clientId",
+        label: "Planning Center Application ID",
+        type: "text",
+        placeholder: "Long string of letters and numbers...",
+        value: this.clientId,
+      },
+      {
+        id: "clientSecret",
+        label: "Planning Center Application Secret",
+        type: "password",
+        placeholder: "Long string of letters and numbers...",
+        value: this.clientSecret,
+      }
+    ];
+
+    try {
+      const values = await modal.show("Re-authenticate with Planning Center", "Please enter your Planning Center credentials to continue.", fields);
+
+      if (!values) {
+        return false; // User cancelled
+      }
+
+      if (!values.clientId || !values.clientId.trim()) {
+        alert("❌ Application ID is required. Please try again.");
+        return false;
+      }
+
+      if (!values.clientSecret || !values.clientSecret.trim()) {
+        alert("❌ Application Secret is required. Please try again.");
+        return false;
+      }
+
       TokenStorage.saveClientId(values.clientId.trim());
       TokenStorage.saveClientSecret(values.clientSecret.trim());
 
       console.info("Client ID and secret have been saved.");
-      alert("✅ Credentials saved successfully! You can now import songs from CCLI SongSelect.");
+      
       return true;
 
     } catch (error) {
@@ -1645,6 +1695,17 @@ class App {
         if (!success) {
           return; // User cancelled setup
         }
+        
+        // After saving credentials, show OAuth popup
+        alert([
+          "✅ Credentials saved!",
+          "",
+          "Now you'll be redirected to Planning Center to authorize the application.",
+          "After authorization, please try importing the song again."
+        ].join("\n"));
+        
+        this.authFlow.startLogin();
+        return;
       }
 
       // Handle login if needed
