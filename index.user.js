@@ -712,6 +712,7 @@ class TokenStorage {
   static CLIENT_ID_KEY = "client_id";
   static CLIENT_SECRET_KEY = "client_secret";
   static EXPIRES_AT_KEY = "expires_at";
+  static PENDING_IMPORT_KEY = "pending_import";
 
   saveToken(tokenData) {
     GM_setValue(TokenStorage.ACCESS_TOKEN_KEY, tokenData.access_token);
@@ -837,6 +838,32 @@ class TokenStorage {
       console.error("Error in credential prompt:", error);
       return false;
     }
+  }
+
+  setPendingImport(songId, slug) {
+    GM_setValue(TokenStorage.PENDING_IMPORT_KEY, JSON.stringify({ songId, slug, timestamp: Date.now() }));
+  }
+
+  getPendingImport() {
+    const pending = GM_getValue(TokenStorage.PENDING_IMPORT_KEY, null);
+    if (!pending) return null;
+    
+    try {
+      const data = JSON.parse(pending);
+      // Check if pending import is less than 10 minutes old
+      if (Date.now() - data.timestamp > 10 * 60 * 1000) {
+        this.clearPendingImport();
+        return null;
+      }
+      return data;
+    } catch {
+      this.clearPendingImport();
+      return null;
+    }
+  }
+
+  clearPendingImport() {
+    GM_setValue(TokenStorage.PENDING_IMPORT_KEY, null);
   }
 
   get accessToken() {
@@ -1017,6 +1044,7 @@ class OAuthFlow {
   constructor() {
     this.client = new OAuthClient();
     this.tokenStorage = new TokenStorage();
+    this.onAuthCompleteCallback = null;
   }
 
   init() {
@@ -1074,6 +1102,10 @@ class OAuthFlow {
     window.addEventListener("message", (event) => this._onMessage(event));
   }
 
+  setAuthCompleteCallback(callback) {
+    this.onAuthCompleteCallback = callback;
+  }
+
   _onMessage(event) {
     if (event.data?.type !== "oauth_complete" || !event.data.access_token) {
       console.debug("Invalid message received:", event.data);
@@ -1082,7 +1114,17 @@ class OAuthFlow {
 
     this.tokenStorage.saveToken(event.data);
     console.info("✅ Successfully connected to Planning Center!");
-    alert("✅ Successfully connected to Planning Center! You can now import songs.");
+    
+    // Check if we should automatically continue with import
+    const pendingImport = this.tokenStorage.getPendingImport();
+    if (pendingImport && this.onAuthCompleteCallback) {
+      console.info("🔄 Automatically continuing with pending import...");
+      this.tokenStorage.clearPendingImport();
+      // Use setTimeout to ensure the auth flow completes first
+      setTimeout(() => this.onAuthCompleteCallback(pendingImport), 100);
+    } else {
+      alert("✅ Successfully connected to Planning Center! You can now import songs.");
+    }
   }
 
   get popupFeatures() {
@@ -1756,12 +1798,28 @@ class App {
 
   run() {
     this.authFlow.init();
+    // Set up callback for automatic import continuation
+    this.authFlow.setAuthCompleteCallback((pendingImport) => {
+      this.continueImportAfterAuth(pendingImport);
+    });
     GM_registerMenuCommand("⬇️ Import Song to Planning Center", () => this.importSongToPlanningCenter());
   }
 
-  async importSongToPlanningCenter() {
-    let progress = null;
+  async continueImportAfterAuth(pendingImport) {
+    try {
+      console.info(`Continuing import for song ${pendingImport.songId}...`);
+      await this.performImport(pendingImport.songId, pendingImport.slug);
+    } catch (error) {
+      console.error("Failed to continue import after auth:", error);
+      alert([
+        "❌ Failed to continue import",
+        "",
+        "Please try importing the song again manually."
+      ].join("\n"));
+    }
+  }
 
+  async importSongToPlanningCenter() {
     try {
       if (!this.isCorrectPage()) {
         alert([
@@ -1773,10 +1831,17 @@ class App {
         return;
       }
 
+      const ccliSongId = this.songFinder.getSongId();
+      const slug = location.pathname.split("/").pop();
+
       // Handle credentials setup if needed
       if (!this.tokenStorage.hasCredentials) {
+        // Store pending import before showing credentials modal
+        this.tokenStorage.setPendingImport(ccliSongId, slug);
+        
         const success = await this.tokenStorage.promptForCredentials();
         if (!success) {
+          this.tokenStorage.clearPendingImport();
           return; // User cancelled setup
         }
         
@@ -1785,7 +1850,7 @@ class App {
           "✅ Credentials saved!",
           "",
           "Now you'll be redirected to Planning Center to authorize the application.",
-          "After authorization, please try importing the song again."
+          "The import will continue automatically after authorization."
         ].join("\n"));
         
         this.authFlow.startLogin();
@@ -1795,11 +1860,14 @@ class App {
       // Handle login if needed
       if (!this.tokenStorage.isTokenValid) {
         if (!this.tokenStorage.refreshToken) {
+          // Store pending import before showing login
+          this.tokenStorage.setPendingImport(ccliSongId, slug);
+          
           alert([
             "🔐 Authentication Required",
             "",
             `You'll be redirected to Planning Center to log in.`,
-            `After logging in, please try importing the song again.`
+            `The import will continue automatically after login.`
           ].join("\n"));
           this.authFlow.startLogin();
           return;
@@ -1809,25 +1877,44 @@ class App {
           await this.authFlow.refreshToken();
         } catch (err) {
           console.error("Failed to refresh token:", err);
+          
+          // Store pending import before re-authentication
+          this.tokenStorage.setPendingImport(ccliSongId, slug);
+          
           alert([
             "🔐 Login Required",
             "",
             `Your session has expired. You'll be redirected to Planning Center to log in again.`,
-            "After logging in, please try importing the song again."
+            "The import will continue automatically after login."
           ].join("\n"));
           this.authFlow.startLogin();
           return;
         }
       }
 
+      // Clear any pending import since we're proceeding directly
+      this.tokenStorage.clearPendingImport();
+      
+      // Proceed with import
+      await this.performImport(ccliSongId, slug);
+
+    } catch (error) {
+      console.error("Import initiation failed:", error);
+      this.tokenStorage.clearPendingImport();
+      alert(`❌ Failed to start import: ${error.message}`);
+    }
+  }
+
+  async performImport(ccliSongId, slug) {
+    let progress = null;
+
+    try {
       // Start progress indicator
       progress = this.progressIndicator;
       progress.show("Importing Song to Planning Center", 7);
 
       // Step 1: Get song details
       progress.updateProgress(1, "Getting song information...", "Reading CCLI song data");
-      const ccliSongId = this.songFinder.getSongId();
-      const slug = location.pathname.split("/").pop();
       const songDetails = await this.songSelectAPI.fetchSongDetails(ccliSongId, slug);
 
       // Step 2: Check if song exists
