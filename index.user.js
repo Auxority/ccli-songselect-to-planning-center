@@ -273,8 +273,8 @@ class CredentialModal {
     // Remove existing modal if any
     this.remove();
 
-    this.modal = document.createElement('div');
-    this.modal.id = 'ccli-credential-modal';
+    this.modal = document.createElement("div");
+    this.modal.id = "ccli-credential-modal";
     this.modal.innerHTML = `
       <div class="ccli-modal-overlay">
         <div class="ccli-modal-content">
@@ -289,14 +289,14 @@ class CredentialModal {
                 <div class="ccli-form-group">
                   <label for="${field.id}">${field.label}</label>
                   <input 
-                    type="${field.type || 'text'}" 
+                    type="${field.type || "text"}" 
                     id="${field.id}" 
                     name="${field.id}"
-                    placeholder="${field.placeholder || ''}"
+                    placeholder="${field.placeholder || ""}"
                     required
                   />
                 </div>
-              `).join('')}
+              `).join("")}
             </form>
           </div>
           <div class="ccli-modal-footer">
@@ -317,7 +317,7 @@ class CredentialModal {
   }
 
   addStyles() {
-    if (document.getElementById('ccli-modal-styles')) {
+    if (document.getElementById("ccli-modal-styles")) {
       return; // Styles already added
     };
 
@@ -327,24 +327,24 @@ class CredentialModal {
 
   addEventListeners() {
     // Close button
-    this.modal.querySelector('.ccli-modal-close').addEventListener('click', () => {
+    this.modal.querySelector(".ccli-modal-close").addEventListener("click", () => {
       this.close(null);
     });
 
     // Cancel button
-    this.modal.querySelector('#ccli-modal-cancel').addEventListener('click', () => {
+    this.modal.querySelector("#ccli-modal-cancel").addEventListener("click", () => {
       this.close(null);
     });
 
     // Overlay click
-    this.modal.querySelector('.ccli-modal-overlay').addEventListener('click', (e) => {
+    this.modal.querySelector(".ccli-modal-overlay").addEventListener("click", (e) => {
       if (e.target === e.currentTarget) {
         this.close(null);
       }
     });
 
     // Form submission
-    this.modal.querySelector('#ccli-credential-form').addEventListener('submit', (e) => {
+    this.modal.querySelector("#ccli-credential-form").addEventListener("submit", (e) => {
       e.preventDefault();
       const formData = new FormData(e.target);
       const values = Object.fromEntries(formData.entries());
@@ -352,20 +352,20 @@ class CredentialModal {
     });
 
     // Escape key
-    document.addEventListener('keydown', this.handleEscapeKey.bind(this));
+    document.addEventListener("keydown", this.handleEscapeKey.bind(this));
   }
 
   handleEscapeKey(e) {
-    if (e.key === 'Escape' && this.modal) {
+    if (e.key === "Escape" && this.modal) {
       this.close(null);
     }
   }
 
   showModal() {
-    this.modal.style.display = 'block';
+    this.modal.style.display = "block";
     // Focus first input
     setTimeout(() => {
-      const firstInput = this.modal.querySelector('input');
+      const firstInput = this.modal.querySelector("input");
       if (firstInput) firstInput.focus();
     }, 100);
   }
@@ -380,7 +380,7 @@ class CredentialModal {
 
   remove() {
     if (this.modal) {
-      document.removeEventListener('keydown', this.handleEscapeKey.bind(this));
+      document.removeEventListener("keydown", this.handleEscapeKey.bind(this));
       this.modal.remove();
       this.modal = null;
     }
@@ -405,12 +405,12 @@ class TokenStorage {
       "To use this extension, you need to create a Planning Center API application:",
       "",
       "1. Go to: https://api.planningcenteronline.com/oauth/applications",
-      "2. Click 'New Application'",
-      "3. Fill in these details:",
-      "   • Name: 'CCLI SongSelect Importer' (or any name you prefer)",
-      "   • Redirect URI: 'https://services.planningcenteronline.com/dashboard/0'",
-      "4. Click 'Submit'",
-      "5. Copy the 'Application ID' and 'Secret' from the next page",
+      `2. Click "New Application"`,
+      `3. Fill in these details:`,
+      `   • Name: "CCLI SongSelect Importer" (or any name you prefer)`,
+      `   • Redirect URI: "https://services.planningcenteronline.com/dashboard/0"`,
+      `4. Click "Submit"`,
+      `5. Copy the "Application ID" and "Secret" from the next page`,
       "",
       "You only need to do this once."
     ].join("\n");
@@ -419,21 +419,21 @@ class TokenStorage {
 
     const fields = [
       {
-        id: 'clientId',
-        label: 'Planning Center Application ID',
-        type: 'text',
-        placeholder: 'Long string of letters and numbers...'
+        id: "clientId",
+        label: "Planning Center Application ID",
+        type: "text",
+        placeholder: "Long string of letters and numbers..."
       },
       {
-        id: 'clientSecret',
-        label: 'Planning Center Application Secret',
-        type: 'password',
-        placeholder: 'Long string of letters and numbers...'
+        id: "clientSecret",
+        label: "Planning Center Application Secret",
+        type: "password",
+        placeholder: "Long string of letters and numbers..."
       }
     ];
 
     try {
-      const values = await modal.show('Setup Planning Center Credentials', instructions, fields);
+      const values = await modal.show("Setup Planning Center Credentials", instructions, fields);
 
       if (!values) {
         return false; // User cancelled
@@ -1157,8 +1157,8 @@ class App {
           alert([
             "🔐 Authentication Required",
             "",
-            "You'll be redirected to Planning Center to log in.",
-            "After logging in, please try importing the song again."
+            `You"ll be redirected to Planning Center to log in.`,
+            `After logging in, please try importing the song again.`
           ].join("\n"));
           this.authFlow.startLogin();
           return;
@@ -1172,7 +1172,7 @@ class App {
           alert([
             "🔐 Login Required",
             "",
-            "Your session has expired. You'll be redirected to Planning Center to log in again.",
+            `Your session has expired. You"ll be redirected to Planning Center to log in again.`,
             "After logging in, please try importing the song again."
           ].join("\n"));
           this.authFlow.startLogin();
@@ -1225,7 +1225,7 @@ class App {
       } else if (error.message.includes("401") || error.message.includes("Unauthorized")) {
         userMessage += "Authentication failed. Please try the import again to re-authenticate.";
       } else if (error.message.includes("403") || error.message.includes("Forbidden")) {
-        userMessage += "You don't have permission to add songs to Planning Center. Please check with your administrator.";
+        userMessage += `You don"t have permission to add songs to Planning Center. Please check with your administrator.`;
       } else {
         userMessage += error.message;
       }
