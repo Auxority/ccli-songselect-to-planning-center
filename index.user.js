@@ -39,19 +39,22 @@ GM_addStyle(`
   justify-content: center;
   animation: ccli-fadeIn 0.2s ease-out;
   z-index: 1;
+  padding: 16px;
+  box-sizing: border-box;
 }
 
 .ccli-modal-content {
   background: white;
   border-radius: 12px;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-  width: 90%;
+  width: 100%;
   max-width: 500px;
   max-height: 90vh;
-  overflow: hidden;
+  overflow-y: auto;
   animation: ccli-slideIn 0.3s ease-out;
   position: relative;
   z-index: 2;
+  margin: auto;
 }
 
 .ccli-modal-header {
@@ -261,6 +264,83 @@ GM_addStyle(`
 
 .ccli-modal-visible {
   display: block;
+}
+
+@media (max-width: 768px) {
+  .ccli-modal-overlay {
+    padding: 8px;
+    align-items: flex-start;
+    padding-top: 20px;
+  }
+  
+  .ccli-modal-content {
+    max-height: calc(100vh - 40px);
+    border-radius: 8px;
+  }
+  
+  .ccli-modal-header {
+    padding: 16px 16px 12px !important;
+  }
+  
+  .ccli-modal-body {
+    padding: 16px !important;
+  }
+  
+  .ccli-modal-footer {
+    padding: 12px 16px 16px !important;
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .ccli-btn {
+    width: 100%;
+    order: 2;
+  }
+  
+  .ccli-btn-primary {
+    order: 1;
+  }
+  
+  .ccli-form-group input {
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+}
+
+@media (max-width: 480px) {
+  .ccli-modal-overlay {
+    padding: 4px;
+    padding-top: 10px;
+  }
+  
+  .ccli-modal-content {
+    max-height: calc(100vh - 20px);
+  }
+  
+  .ccli-modal-header h2 {
+    font-size: 18px;
+  }
+  
+  .ccli-modal-message {
+    font-size: 13px;
+    padding: 12px;
+    margin-bottom: 16px;
+  }
+}
+
+@keyframes ccli-fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes ccli-slideIn {
+  from { 
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 `);
 
@@ -539,7 +619,11 @@ class CredentialModal {
                     id="${field.id}" 
                     name="${field.id}"
                     placeholder="${field.placeholder || ""}"
+                    value="${field.value || ""}"
                     required
+                    autocomplete="off"
+                    autocapitalize="none"
+                    spellcheck="false"
                   />
                 </div>
               `).join("")}
