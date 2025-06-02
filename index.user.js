@@ -15,6 +15,284 @@
 // @updateURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
 // ==/UserScript==
 
+GM_addStyle(`
+#ccli-confirmation-modal, #ccli-progress-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 999999;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.ccli-modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: ccli-fadeIn 0.2s ease-out;
+  z-index: 1;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.ccli-modal-content {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  width: 100%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: ccli-slideIn 0.3s ease-out;
+  position: relative;
+  z-index: 2;
+  margin: auto;
+}
+
+.ccli-modal-header {
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ccli-modal-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.ccli-modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #6b7280;
+  padding: 4px;
+  border-radius: 6px;
+  transition: all 0.2s;
+  line-height: 1;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ccli-modal-close:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.ccli-modal-body {
+  padding: 20px 24px;
+}
+
+.ccli-modal-footer {
+  padding: 16px 24px 24px;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.ccli-btn {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+  display: inline-block;
+  text-align: center;
+  text-decoration: none;
+  user-select: none;
+  vertical-align: middle;
+}
+
+.ccli-btn-primary {
+  background: #3b82f6;
+  color: white;
+}
+
+.ccli-btn-primary:hover {
+  background: #2563eb;
+}
+
+.ccli-btn-secondary {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.ccli-btn-secondary:hover {
+  background: #e5e7eb;
+}
+
+.ccli-progress-container {
+  text-align: center;
+}
+
+.ccli-progress-bar-bg {
+  width: 100%;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.ccli-progress-bar {
+  height: 100%;
+  background: #3b82f6;
+  border-radius: 4px;
+  width: 0%;
+  transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+.ccli-progress-bar.error {
+  background-color: #dc3545;
+}
+
+.ccli-progress-bar.success {
+  background-color: #28a745;
+}
+
+.ccli-progress-bar.complete {
+  width: 100%;
+}
+
+.ccli-progress-status {
+  font-size: 16px;
+  font-weight: 500;
+  color: #111827;
+  margin-bottom: 8px;
+}
+
+.ccli-progress-details {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 16px;
+}
+
+.ccli-confirmation-content .ccli-modal-body {
+  text-align: center;
+}
+
+.ccli-confirmation-message {
+  font-size: 16px;
+  color: #374151;
+  margin-bottom: 24px;
+  line-height: 1.5;
+}
+
+.ccli-confirmation-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+}
+
+.ccli-confirmation-buttons .ccli-btn {
+  min-width: 100px;
+}
+
+.ccli-btn-danger {
+  background: #dc3545;
+  color: white;
+}
+
+.ccli-btn-danger:hover {
+  background: #c82333;
+}
+
+.ccli-modal-hidden {
+  display: none;
+}
+
+.ccli-modal-visible {
+  display: block;
+}
+
+@media (max-width: 768px) {
+  .ccli-modal-overlay {
+    padding: 8px;
+    align-items: flex-start;
+    padding-top: 20px;
+  }
+  
+  .ccli-modal-content {
+    max-height: calc(100vh - 40px);
+    border-radius: 8px;
+  }
+  
+  .ccli-modal-header {
+    padding: 16px 16px 12px !important;
+  }
+  
+  .ccli-modal-body {
+    padding: 16px !important;
+  }
+  
+  .ccli-modal-footer {
+    padding: 12px 16px 16px !important;
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .ccli-btn {
+    width: 100%;
+    order: 2;
+  }
+  
+  .ccli-btn-primary {
+    order: 1;
+  }
+}
+
+@media (max-width: 480px) {
+  .ccli-modal-overlay {
+    padding: 4px;
+    padding-top: 10px;
+  }
+  
+  .ccli-modal-content {
+    max-height: calc(100vh - 20px);
+  }
+  
+  .ccli-modal-header h2 {
+    font-size: 18px;
+  }
+}
+
+@keyframes ccli-fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes ccli-slideIn {
+  from { 
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+`);
+
 class IntegerParser {
   /**
    * Parses a valid finite integer from a string
@@ -248,9 +526,9 @@ class SongSelectAPI {
 class TokenStorage {
   static ACCESS_TOKEN_KEY = "access_token";
   static REFRESH_TOKEN_KEY = "refresh_token";
-  static CLIENT_ID_KEY = "client_id";
-  static CLIENT_SECRET_KEY = "client_secret";
   static EXPIRES_AT_KEY = "expires_at";
+  static PENDING_IMPORT_KEY = "pending_import";
+  static CODE_VERIFIER_KEY = "code_verifier";
 
   saveToken(tokenData) {
     GM_setValue(TokenStorage.ACCESS_TOKEN_KEY, tokenData.access_token);
@@ -258,43 +536,42 @@ class TokenStorage {
     GM_setValue(TokenStorage.EXPIRES_AT_KEY, Date.now() + tokenData.expires_in * 1000);
   }
 
-  promptForCredentials() {
-    const validId = this._promptForClientId();
-    const validSecret = this._promptForClientSecret();
+  saveCodeVerifier(codeVerifier) {
+    GM_setValue(TokenStorage.CODE_VERIFIER_KEY, codeVerifier);
+  }
 
-    if (validId && validSecret) {
-      console.info("Client ID and secret have been saved.");
-      alert("✅ Credentials saved.");
-      return;
+  getCodeVerifier() {
+    return GM_getValue(TokenStorage.CODE_VERIFIER_KEY, null);
+  }
+
+  clearCodeVerifier() {
+    GM_setValue(TokenStorage.CODE_VERIFIER_KEY, null);
+  }
+
+  setPendingImport(songId, slug) {
+    GM_setValue(TokenStorage.PENDING_IMPORT_KEY, JSON.stringify({ songId, slug, timestamp: Date.now() }));
+  }
+
+  getPendingImport() {
+    const pending = GM_getValue(TokenStorage.PENDING_IMPORT_KEY, null);
+    if (!pending) return null;
+    
+    try {
+      const data = JSON.parse(pending);
+      // Check if pending import is less than 10 minutes old
+      if (Date.now() - data.timestamp > 10 * 60 * 1000) {
+        this.clearPendingImport();
+        return null;
+      }
+      return data;
+    } catch {
+      this.clearPendingImport();
+      return null;
     }
   }
 
-  _promptForClientId() {
-    const id = prompt("Please enter your Planning Center client ID:");
-    if (!id || id.trim() === "") {
-      console.error("Client ID cannot be empty.");
-      alert("❌ Client ID cannot be empty.");
-      return;
-    }
-
-    GM_setValue("client_id", id.trim());
-    console.debug("Client ID has been saved.");
-
-    return true;
-  }
-
-  _promptForClientSecret() {
-    const secret = prompt("Please enter your Planning Center client secret:");
-    if (!secret || secret.trim() === "") {
-      console.error("Client secret cannot be empty.");
-      alert("❌ Client secret cannot be empty.");
-      return;
-    }
-
-    GM_setValue("client_secret", secret.trim());
-    console.debug("Client secret has been saved.");
-
-    return true;
+  clearPendingImport() {
+    GM_setValue(TokenStorage.PENDING_IMPORT_KEY, null);
   }
 
   get accessToken() {
@@ -309,18 +586,6 @@ class TokenStorage {
     const raw = GM_getValue(TokenStorage.EXPIRES_AT_KEY, 0);
     const expiresAt = Number(raw);
     return Date.now() < expiresAt;
-  }
-
-  get clientId() {
-    return GM_getValue(TokenStorage.CLIENT_ID_KEY, null);
-  }
-
-  get clientSecret() {
-    return GM_getValue(TokenStorage.CLIENT_SECRET_KEY, null);
-  }
-
-  get hasCredentials() {
-    return this.clientId && this.clientSecret;
   }
 }
 
@@ -379,6 +644,7 @@ class GMHttpClient {
 
 class OAuthClient {
   static CONFIG = {
+    CLIENT_ID: "0ee14294650bb97000608fc17e63ce8616c3728e97d3219f45156f493d410ccc",
     REDIRECT_URI: "https://services.planningcenteronline.com/dashboard/0",
     AUTH_URL: "https://api.planningcenteronline.com/oauth/authorize",
     TOKEN_URL: "https://api.planningcenteronline.com/oauth/token",
@@ -391,13 +657,19 @@ class OAuthClient {
   }
 
   async exchangeCodeForToken(code) {
-    const searchParams = this.generateTokenSearchParams(code);
+    const codeVerifier = this.tokenStorage.getCodeVerifier();
+    if (!codeVerifier) {
+      throw new Error("Code verifier not found. Please restart the authentication process.");
+    }
+
+    const searchParams = this.generateTokenSearchParams(code, codeVerifier);
 
     console.info("🔄 Attempting to exchange code for token...");
 
     const response = await this.gmHttpClient.post(OAuthClient.CONFIG.TOKEN_URL, this.headers, searchParams.toString());
     const result = JSON.parse(response.responseText);
     this.tokenStorage.saveToken(result);
+    this.tokenStorage.clearCodeVerifier();
 
     if (window.opener) {
       window.opener.postMessage({
@@ -410,11 +682,13 @@ class OAuthClient {
     }
   }
 
-  generateTokenSearchParams(code) {
+  generateTokenSearchParams(code, codeVerifier) {
     return new URLSearchParams({
       grant_type: "authorization_code",
       code: code,
       redirect_uri: OAuthClient.CONFIG.REDIRECT_URI,
+      client_id: OAuthClient.CONFIG.CLIENT_ID,
+      code_verifier: codeVerifier,
     });
   }
 
@@ -424,7 +698,7 @@ class OAuthClient {
     const searchParams = this.generateRefreshTokenSearchParams();
 
     const response = await this.gmHttpClient.post(OAuthClient.CONFIG.TOKEN_URL, this.headers, searchParams.toString()).catch(err => {
-      console.error("🔁 Token refresh failed:", response);
+      console.error("🔁 Token refresh failed:", err);
       alert("Refresh token is invalid or expired. Please log in again.");
       throw new Error("Refresh request failed:", err);
     });
@@ -436,6 +710,7 @@ class OAuthClient {
     return new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: this.tokenStorage.refreshToken,
+      client_id: OAuthClient.CONFIG.CLIENT_ID,
     });
   }
 
@@ -446,25 +721,48 @@ class OAuthClient {
   }
 
   get headers() {
-    const authHeader = btoa(`${this.tokenStorage.clientId}:${this.tokenStorage.clientSecret}`);
-
     return {
-      "Authorization": `Basic ${authHeader}`,
       "Content-Type": "application/x-www-form-urlencoded",
     };
   }
 
-  get authUrl() {
+  async generateAuthUrl() {
+    const codeVerifier = this.generateCodeVerifier();
+    const codeChallenge = await this.generateCodeChallenge(codeVerifier);
+    
+    this.tokenStorage.saveCodeVerifier(codeVerifier);
+
     const state = Math.random().toString(36).substring(2);
     const params = new URLSearchParams({
       response_type: "code",
-      client_id: this.tokenStorage.clientId,
+      client_id: OAuthClient.CONFIG.CLIENT_ID,
       redirect_uri: OAuthClient.CONFIG.REDIRECT_URI,
       scope: OAuthClient.CONFIG.SCOPE,
       state,
+      code_challenge: codeChallenge,
+      code_challenge_method: "S256",
     });
 
     return `${OAuthClient.CONFIG.AUTH_URL}?${params.toString()}`;
+  }
+
+  generateCodeVerifier() {
+    const array = new Uint8Array(32);
+    crypto.getRandomValues(array);
+    return btoa(String.fromCharCode(...array))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+  }
+
+  async generateCodeChallenge(codeVerifier) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(codeVerifier);
+    const digest = await crypto.subtle.digest('SHA-256', data);
+    return btoa(String.fromCharCode(...new Uint8Array(digest)))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
   }
 }
 
@@ -499,8 +797,9 @@ class OAuthFlow {
     }
   }
 
-  startLogin() {
-    const popup = window.open(this.client.authUrl, "oauthPopup", this.popupFeatures);
+  async startLogin() {
+    const authUrl = await this.client.generateAuthUrl();
+    const popup = window.open(authUrl, "oauthPopup", this.popupFeatures);
     if (!popup || popup.closed || typeof popup.closed === "undefined") {
       console.error(`Popup blocked! Please allow popups for this site.`);
       alert("❌ Popup blocked! Please allow popups for this site.");
@@ -965,10 +1264,66 @@ class App {
       await this.ensureValidToken();
 
       const ccliSongId = this.songFinder.getSongId();
-      const existingSong = await this.planningCenterAPI.findSongById(ccliSongId).catch(console.debug);
-
-      // Get song details from CCLI
       const slug = location.pathname.split("/").pop();
+
+      // Handle login if needed
+      if (!this.tokenStorage.isTokenValid) {
+        if (!this.tokenStorage.refreshToken) {
+          // Store pending import before showing login
+          this.tokenStorage.setPendingImport(ccliSongId, slug);
+          
+          alert([
+            "🔐 Authentication Required",
+            "",
+            `You'll be redirected to Planning Center to log in.`,
+            `The import will continue automatically after login.`
+          ].join("\n"));
+          this.authFlow.startLogin();
+          return;
+        }
+
+        try {
+          await this.authFlow.refreshToken();
+        } catch (err) {
+          console.error("Failed to refresh token:", err);
+          
+          // Store pending import before re-authentication
+          this.tokenStorage.setPendingImport(ccliSongId, slug);
+          
+          alert([
+            "🔐 Login Required",
+            "",
+            `Your session has expired. You'll be redirected to Planning Center to log in again.`,
+            "The import will continue automatically after login."
+          ].join("\n"));
+          this.authFlow.startLogin();
+          return;
+        }
+      }
+
+      // Clear any pending import since we're proceeding directly
+      this.tokenStorage.clearPendingImport();
+      
+      // Proceed with import
+      await this.performImport(ccliSongId, slug);
+
+    } catch (error) {
+      console.error("Import initiation failed:", error);
+      this.tokenStorage.clearPendingImport();
+      alert(`❌ Failed to start import: ${error.message}`);
+    }
+  }
+
+  async performImport(ccliSongId, slug) {
+    let progress = null;
+
+    try {
+      // Start progress indicator
+      progress = this.progressIndicator;
+      progress.show("Importing Song to Planning Center", 7);
+
+      // Step 1: Get song details
+      progress.updateProgress(1, "Getting song information...", "Reading CCLI song data");
       const songDetails = await this.songSelectAPI.fetchSongDetails(ccliSongId, slug);
 
       // If song exists, confirm update; otherwise create new
