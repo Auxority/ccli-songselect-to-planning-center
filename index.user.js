@@ -538,7 +538,7 @@ class CredentialModal {
    * @returns {Promise<Object>} - Promise that resolves with field values
    */
   show(title, message, fields) {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve, _) => {
       this.resolvePromise = resolve;
       this.createModal(title, message, fields);
       this.showModal();
@@ -662,37 +662,43 @@ class TokenStorage {
   static EXPIRES_AT_KEY = "expires_at";
   static PENDING_IMPORT_KEY = "pending_import";
   static CODE_VERIFIER_KEY = "code_verifier";
+  static TEN_MINUTES_IN_MS = 10 * 60 * 1000; // 10 minutes in milliseconds
+
+  static codeVerifier = null;
+  static pendingImport = null;
 
   saveToken(tokenData) {
     GM_setValue(TokenStorage.ACCESS_TOKEN_KEY, tokenData.access_token);
     GM_setValue(TokenStorage.REFRESH_TOKEN_KEY, tokenData.refresh_token);
     GM_setValue(TokenStorage.EXPIRES_AT_KEY, Date.now() + tokenData.expires_in * 1000);
   }
-
+  
   saveCodeVerifier(codeVerifier) {
-    GM_setValue(TokenStorage.CODE_VERIFIER_KEY, codeVerifier);
+    TokenStorage.codeVerifier = codeVerifier;
   }
 
   getCodeVerifier() {
-    return GM_getValue(TokenStorage.CODE_VERIFIER_KEY, null);
+    return TokenStorage.codeVerifier;
   }
 
   clearCodeVerifier() {
-    GM_setValue(TokenStorage.CODE_VERIFIER_KEY, null);
+    TokenStorage.codeVerifier = null;
   }
 
   setPendingImport(songId, slug) {
-    GM_setValue(TokenStorage.PENDING_IMPORT_KEY, JSON.stringify({ songId, slug, timestamp: Date.now() }));
+    pendingImport = JSON.stringify({ songId, slug, timestamp: Date.now() });
   }
 
   getPendingImport() {
-    const pending = GM_getValue(TokenStorage.PENDING_IMPORT_KEY, null);
-    if (!pending) return null;
+    const pending = pendingImport;
+    if (!pending) {
+      return null;
+    }
     
     try {
       const data = JSON.parse(pending);
       // Check if pending import is less than 10 minutes old
-      if (Date.now() - data.timestamp > 10 * 60 * 1000) {
+      if (Date.now() - data.timestamp > TokenStorage.TEN_MINUTES_IN_MS) {
         this.clearPendingImport();
         return null;
       }
@@ -704,7 +710,7 @@ class TokenStorage {
   }
 
   clearPendingImport() {
-    GM_setValue(TokenStorage.PENDING_IMPORT_KEY, null);
+    pendingImport = null;
   }
 
   get accessToken() {
