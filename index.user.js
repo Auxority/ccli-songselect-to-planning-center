@@ -17,7 +17,7 @@
 // ==/UserScript==
 
 GM_addStyle(`
-#ccli-credential-modal, #ccli-confirmation-modal, #ccli-progress-modal {
+#ccli-confirmation-modal, #ccli-progress-modal {
   position: fixed;
   top: 0;
   left: 0;
@@ -96,46 +96,6 @@ GM_addStyle(`
 
 .ccli-modal-body {
   padding: 20px 24px;
-}
-
-.ccli-modal-message {
-  background: #f0f9ff;
-  border: 1px solid #bae6fd;
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 20px;
-  font-size: 14px;
-  line-height: 1.5;
-  color: #0c4a6e;
-  white-space: pre-line;
-}
-
-.ccli-form-group {
-  margin-bottom: 20px;
-}
-
-.ccli-form-group label {
-  display: block;
-  margin-bottom: 6px;
-  font-weight: 500;
-  color: #374151;
-  font-size: 14px;
-}
-
-.ccli-form-group input {
-  width: 100%;
-  padding: 12px 16px;
-  border: 2px solid #d1d5db;
-  border-radius: 8px;
-  font-size: 14px;
-  transition: border-color 0.2s, box-shadow 0.2s;
-  box-sizing: border-box;
-}
-
-.ccli-form-group input:focus {
-  outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 .ccli-modal-footer {
@@ -300,10 +260,6 @@ GM_addStyle(`
   .ccli-btn-primary {
     order: 1;
   }
-  
-  .ccli-form-group input {
-    font-size: 16px; /* Prevents zoom on iOS */
-  }
 }
 
 @media (max-width: 480px) {
@@ -318,12 +274,6 @@ GM_addStyle(`
   
   .ccli-modal-header h2 {
     font-size: 18px;
-  }
-  
-  .ccli-modal-message {
-    font-size: 13px;
-    padding: 12px;
-    margin-bottom: 16px;
   }
 }
 
@@ -588,7 +538,7 @@ class CredentialModal {
    * @returns {Promise<Object>} - Promise that resolves with field values
    */
   show(title, message, fields) {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve, _) => {
       this.resolvePromise = resolve;
       this.createModal(title, message, fields);
       this.showModal();
@@ -709,149 +659,45 @@ class CredentialModal {
 class TokenStorage {
   static ACCESS_TOKEN_KEY = "access_token";
   static REFRESH_TOKEN_KEY = "refresh_token";
-  static CLIENT_ID_KEY = "client_id";
-  static CLIENT_SECRET_KEY = "client_secret";
   static EXPIRES_AT_KEY = "expires_at";
   static PENDING_IMPORT_KEY = "pending_import";
+  static CODE_VERIFIER_KEY = "code_verifier";
+  static TEN_MINUTES_IN_MS = 10 * 60 * 1000; // 10 minutes in milliseconds
+
+  static codeVerifier = null;
+  static pendingImport = null;
 
   saveToken(tokenData) {
     GM_setValue(TokenStorage.ACCESS_TOKEN_KEY, tokenData.access_token);
     GM_setValue(TokenStorage.REFRESH_TOKEN_KEY, tokenData.refresh_token);
     GM_setValue(TokenStorage.EXPIRES_AT_KEY, Date.now() + tokenData.expires_in * 1000);
   }
-
-  saveClientId(clientId) {
-    GM_setValue(TokenStorage.CLIENT_ID_KEY, clientId);
+  
+  saveCodeVerifier(codeVerifier) {
+    TokenStorage.codeVerifier = codeVerifier;
   }
 
-  saveClientSecret(clientSecret) {
-    GM_setValue(TokenStorage.CLIENT_SECRET_KEY, clientSecret);
+  getCodeVerifier() {
+    return TokenStorage.codeVerifier;
   }
 
-  async promptForCredentials() {
-    const instructions = [
-      "To use this extension, you need to create a Planning Center API application:",
-      "",
-      "1. Go to: https://api.planningcenteronline.com/oauth/applications",
-      `2. Click "New Application"`,
-      `3. Fill in these details:`,
-      `   • Name: "CCLI SongSelect Importer" (or any name you prefer)`,
-      `   • Redirect URI: "${OAuthClient.CONFIG.REDIRECT_URI}"`,
-      `4. Click "Submit"`,
-      `5. Copy the "Application ID" and "Secret" from the next page`,
-      "",
-      "After saving, you'll be redirected to Planning Center to authorize the application."
-    ].join("\n");
-
-    const modal = new CredentialModal();
-
-    const fields = [
-      {
-        id: "clientId",
-        label: "Planning Center Application ID",
-        type: "text",
-        placeholder: "Long string of letters and numbers..."
-      },
-      {
-        id: "clientSecret",
-        label: "Planning Center Application Secret",
-        type: "password",
-        placeholder: "Long string of letters and numbers..."
-      }
-    ];
-
-    try {
-      const values = await modal.show("Setup Planning Center Credentials", instructions, fields);
-
-      if (!values) {
-        return false; // User cancelled
-      }
-
-      if (!values.clientId || !values.clientId.trim()) {
-        alert("❌ Application ID is required. Please try again.");
-        return false;
-      }
-
-      if (!values.clientSecret || !values.clientSecret.trim()) {
-        alert("❌ Application Secret is required. Please try again.");
-        return false;
-      }
-
-      this.saveClientId(values.clientId.trim());
-      this.saveClientSecret(values.clientSecret.trim());
-
-      console.info("Client ID and secret have been saved.");
-      
-      return true;
-
-    } catch (error) {
-      console.error("Error in credential prompt:", error);
-      return false;
-    }
-  }
-
-  async promptForReAuthentication() {
-    const modal = new CredentialModal();
-
-    const fields = [
-      {
-        id: "clientId",
-        label: "Planning Center Application ID",
-        type: "text",
-        placeholder: "Long string of letters and numbers...",
-        value: this.clientId,
-      },
-      {
-        id: "clientSecret",
-        label: "Planning Center Application Secret",
-        type: "password",
-        placeholder: "Long string of letters and numbers...",
-        value: this.clientSecret,
-      }
-    ];
-
-    try {
-      const values = await modal.show("Re-authenticate with Planning Center", "Please enter your Planning Center credentials to continue.", fields);
-
-      if (!values) {
-        return false; // User cancelled
-      }
-
-      if (!values.clientId || !values.clientId.trim()) {
-        alert("❌ Application ID is required. Please try again.");
-        return false;
-      }
-
-      if (!values.clientSecret || !values.clientSecret.trim()) {
-        alert("❌ Application Secret is required. Please try again.");
-        return false;
-      }
-
-      TokenStorage.saveClientId(values.clientId.trim());
-      TokenStorage.saveClientSecret(values.clientSecret.trim());
-
-      console.info("Client ID and secret have been saved.");
-      
-      return true;
-
-    } catch (error) {
-      console.error("Error in credential prompt:", error);
-      return false;
-    }
+  clearCodeVerifier() {
+    TokenStorage.codeVerifier = null;
   }
 
   setPendingImport(songId, slug) {
-    GM_setValue(TokenStorage.PENDING_IMPORT_KEY, JSON.stringify({ songId, slug, timestamp: Date.now() }));
+    TokenStorage.pendingImport = JSON.stringify({ songId, slug, timestamp: Date.now() });
   }
 
   getPendingImport() {
-    const pending = GM_getValue(TokenStorage.PENDING_IMPORT_KEY, null);
-    if (!pending) return null;
+    if (!TokenStorage.pendingImport) {
+      return null;
+    }
     
     try {
       const data = JSON.parse(pending);
       // Check if pending import is less than 10 minutes old
-      if (Date.now() - data.timestamp > 10 * 60 * 1000) {
+      if (Date.now() - data.timestamp > TokenStorage.TEN_MINUTES_IN_MS) {
         this.clearPendingImport();
         return null;
       }
@@ -863,7 +709,7 @@ class TokenStorage {
   }
 
   clearPendingImport() {
-    GM_setValue(TokenStorage.PENDING_IMPORT_KEY, null);
+    TokenStorage.pendingImport = null;
   }
 
   get accessToken() {
@@ -878,18 +724,6 @@ class TokenStorage {
     const raw = GM_getValue(TokenStorage.EXPIRES_AT_KEY, 0);
     const expiresAt = Number(raw);
     return Date.now() < expiresAt;
-  }
-
-  get clientId() {
-    return GM_getValue(TokenStorage.CLIENT_ID_KEY, null);
-  }
-
-  get clientSecret() {
-    return GM_getValue(TokenStorage.CLIENT_SECRET_KEY, null);
-  }
-
-  get hasCredentials() {
-    return this.clientId && this.clientSecret;
   }
 }
 
@@ -948,6 +782,7 @@ class GMHttpClient {
 
 class OAuthClient {
   static CONFIG = {
+    CLIENT_ID: "0ee14294650bb97000608fc17e63ce8616c3728e97d3219f45156f493d410ccc",
     REDIRECT_URI: "https://services.planningcenteronline.com/dashboard/0",
     AUTH_URL: "https://api.planningcenteronline.com/oauth/authorize",
     TOKEN_URL: "https://api.planningcenteronline.com/oauth/token",
@@ -960,13 +795,19 @@ class OAuthClient {
   }
 
   async exchangeCodeForToken(code) {
-    const searchParams = this.generateTokenSearchParams(code);
+    const codeVerifier = this.tokenStorage.getCodeVerifier();
+    if (!codeVerifier) {
+      throw new Error("Code verifier not found. Please restart the authentication process.");
+    }
+
+    const searchParams = this.generateTokenSearchParams(code, codeVerifier);
 
     console.info("🔄 Attempting to exchange code for token...");
 
     const response = await this.gmHttpClient.post(OAuthClient.CONFIG.TOKEN_URL, this.headers, searchParams.toString());
     const result = JSON.parse(response.responseText);
     this.tokenStorage.saveToken(result);
+    this.tokenStorage.clearCodeVerifier();
 
     if (window.opener) {
       window.opener.postMessage({
@@ -979,11 +820,13 @@ class OAuthClient {
     }
   }
 
-  generateTokenSearchParams(code) {
+  generateTokenSearchParams(code, codeVerifier) {
     return new URLSearchParams({
       grant_type: "authorization_code",
       code: code,
       redirect_uri: OAuthClient.CONFIG.REDIRECT_URI,
+      client_id: OAuthClient.CONFIG.CLIENT_ID,
+      code_verifier: codeVerifier,
     });
   }
 
@@ -993,7 +836,7 @@ class OAuthClient {
     const searchParams = this.generateRefreshTokenSearchParams();
 
     const response = await this.gmHttpClient.post(OAuthClient.CONFIG.TOKEN_URL, this.headers, searchParams.toString()).catch(err => {
-      console.error("🔁 Token refresh failed:", response);
+      console.error("🔁 Token refresh failed:", err);
       alert("Refresh token is invalid or expired. Please log in again.");
       throw new Error("Refresh request failed:", err);
     });
@@ -1005,6 +848,7 @@ class OAuthClient {
     return new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: this.tokenStorage.refreshToken,
+      client_id: OAuthClient.CONFIG.CLIENT_ID,
     });
   }
 
@@ -1015,25 +859,48 @@ class OAuthClient {
   }
 
   get headers() {
-    const authHeader = btoa(`${this.tokenStorage.clientId}:${this.tokenStorage.clientSecret}`);
-
     return {
-      "Authorization": `Basic ${authHeader}`,
       "Content-Type": "application/x-www-form-urlencoded",
     };
   }
 
-  get authUrl() {
+  async generateAuthUrl() {
+    const codeVerifier = this.generateCodeVerifier();
+    const codeChallenge = await this.generateCodeChallenge(codeVerifier);
+    
+    this.tokenStorage.saveCodeVerifier(codeVerifier);
+
     const state = Math.random().toString(36).substring(2);
     const params = new URLSearchParams({
       response_type: "code",
-      client_id: this.tokenStorage.clientId,
+      client_id: OAuthClient.CONFIG.CLIENT_ID,
       redirect_uri: OAuthClient.CONFIG.REDIRECT_URI,
       scope: OAuthClient.CONFIG.SCOPE,
       state,
+      code_challenge: codeChallenge,
+      code_challenge_method: "S256",
     });
 
     return `${OAuthClient.CONFIG.AUTH_URL}?${params.toString()}`;
+  }
+
+  generateCodeVerifier() {
+    const array = new Uint8Array(32);
+    crypto.getRandomValues(array);
+    return btoa(String.fromCharCode(...array))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+  }
+
+  async generateCodeChallenge(codeVerifier) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(codeVerifier);
+    const digest = await crypto.subtle.digest('SHA-256', data);
+    return btoa(String.fromCharCode(...new Uint8Array(digest)))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
   }
 }
 
@@ -1065,8 +932,9 @@ class OAuthFlow {
     }
   }
 
-  startLogin() {
-    const popup = window.open(this.client.authUrl, "oauthPopup", this.popupFeatures);
+  async startLogin() {
+    const authUrl = await this.client.generateAuthUrl();
+    const popup = window.open(authUrl, "oauthPopup", this.popupFeatures);
     if (!popup || popup.closed || typeof popup.closed === "undefined") {
       const message = [
         "❌ Popup was blocked!",
@@ -1833,29 +1701,6 @@ class App {
 
       const ccliSongId = this.songFinder.getSongId();
       const slug = location.pathname.split("/").pop();
-
-      // Handle credentials setup if needed
-      if (!this.tokenStorage.hasCredentials) {
-        // Store pending import before showing credentials modal
-        this.tokenStorage.setPendingImport(ccliSongId, slug);
-        
-        const success = await this.tokenStorage.promptForCredentials();
-        if (!success) {
-          this.tokenStorage.clearPendingImport();
-          return; // User cancelled setup
-        }
-        
-        // After saving credentials, show OAuth popup
-        alert([
-          "✅ Credentials saved!",
-          "",
-          "Now you'll be redirected to Planning Center to authorize the application.",
-          "The import will continue automatically after authorization."
-        ].join("\n"));
-        
-        this.authFlow.startLogin();
-        return;
-      }
 
       // Handle login if needed
       if (!this.tokenStorage.isTokenValid) {
