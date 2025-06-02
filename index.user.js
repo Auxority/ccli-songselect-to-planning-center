@@ -6,11 +6,12 @@
 // @grant       GM_setClipboard
 // @grant       GM_getValue
 // @grant       GM_setValue
+// @grant       GM_deleteValue
 // @grant       GM_xmlhttpRequest
 // @grant       GM_registerMenuCommand
 // @grant       GM_download
 // @grant       GM_addStyle
-// @version     0.12.0
+// @version     0.11.0
 // @author      aux
 // @downloadURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
 // @updateURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
@@ -664,7 +665,6 @@ class TokenStorage {
   static CODE_VERIFIER_KEY = "code_verifier";
   static TEN_MINUTES_IN_MS = 10 * 60 * 1000; // 10 minutes in milliseconds
 
-  static codeVerifier = null;
   static pendingImport = null;
 
   saveToken(tokenData) {
@@ -674,28 +674,30 @@ class TokenStorage {
   }
   
   saveCodeVerifier(codeVerifier) {
-    TokenStorage.codeVerifier = codeVerifier;
+    GM_setValue(TokenStorage.CODE_VERIFIER_KEY, codeVerifier);
   }
 
   getCodeVerifier() {
-    return TokenStorage.codeVerifier;
+    return GM_getValue(TokenStorage.CODE_VERIFIER_KEY, null);
   }
 
   clearCodeVerifier() {
-    TokenStorage.codeVerifier = null;
+    GM_deleteValue(TokenStorage.CODE_VERIFIER_KEY);
   }
 
   setPendingImport(songId, slug) {
-    TokenStorage.pendingImport = JSON.stringify({ songId, slug, timestamp: Date.now() });
+    const data = JSON.stringify({ songId, slug, timestamp: Date.now() });
+    GM_setValue(TokenStorage.PENDING_IMPORT_KEY, data);
   }
 
   getPendingImport() {
-    if (!TokenStorage.pendingImport) {
+    const pendingImport = GM_getValue(TokenStorage.PENDING_IMPORT_KEY, null);
+    if (!pendingImport) {
       return null;
     }
     
     try {
-      const data = JSON.parse(pending);
+      const data = JSON.parse(pendingImport);
       // Check if pending import is less than 10 minutes old
       if (Date.now() - data.timestamp > TokenStorage.TEN_MINUTES_IN_MS) {
         this.clearPendingImport();
@@ -709,7 +711,7 @@ class TokenStorage {
   }
 
   clearPendingImport() {
-    TokenStorage.pendingImport = null;
+    GM_deleteValue(TokenStorage.PENDING_IMPORT_KEY);
   }
 
   get accessToken() {
@@ -867,7 +869,7 @@ class OAuthClient {
   async generateAuthUrl() {
     const codeVerifier = this.generateCodeVerifier();
     const codeChallenge = await this.generateCodeChallenge(codeVerifier);
-    
+
     this.tokenStorage.saveCodeVerifier(codeVerifier);
 
     const state = Math.random().toString(36).substring(2);
