@@ -10,7 +10,7 @@
 // @grant       GM_registerMenuCommand
 // @grant       GM_download
 // @grant       GM_addStyle
-// @version     0.11.0
+// @version     0.12.0
 // @author      aux
 // @downloadURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
 // @updateURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
