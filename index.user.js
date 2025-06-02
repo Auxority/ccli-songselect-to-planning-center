@@ -686,12 +686,11 @@ class TokenStorage {
   }
 
   setPendingImport(songId, slug) {
-    pendingImport = JSON.stringify({ songId, slug, timestamp: Date.now() });
+    TokenStorage.pendingImport = JSON.stringify({ songId, slug, timestamp: Date.now() });
   }
 
   getPendingImport() {
-    const pending = pendingImport;
-    if (!pending) {
+    if (!TokenStorage.pendingImport) {
       return null;
     }
     
@@ -710,7 +709,7 @@ class TokenStorage {
   }
 
   clearPendingImport() {
-    pendingImport = null;
+    TokenStorage.pendingImport = null;
   }
 
   get accessToken() {
