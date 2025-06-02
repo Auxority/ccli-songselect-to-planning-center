@@ -9,7 +9,8 @@
 // @grant       GM_xmlhttpRequest
 // @grant       GM_registerMenuCommand
 // @grant       GM_download
-// @version     0.10.0
+// @grant       GM_addStyle
+// @version     0.11.0
 // @author      aux
 // @downloadURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
 // @updateURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
@@ -523,6 +524,138 @@ class SongSelectAPI {
   }
 }
 
+class CredentialModal {
+  constructor() {
+    this.modal = null;
+    this.resolvePromise = null;
+  }
+
+  /**
+   * Shows a custom modal for credential input
+   * @param {string} title - Modal title
+   * @param {string} message - Instructions message
+   * @param {Array} fields - Array of field objects {id, label, type, placeholder}
+   * @returns {Promise<Object>} - Promise that resolves with field values
+   */
+  show(title, message, fields) {
+    return new Promise((resolve, reject) => {
+      this.resolvePromise = resolve;
+      this.createModal(title, message, fields);
+      this.showModal();
+    });
+  }
+
+  createModal(title, message, fields) {
+    // Remove existing modal if any
+    this.remove();
+
+    this.modal = document.createElement("div");
+    this.modal.id = "ccli-credential-modal";
+    this.modal.innerHTML = `
+      <div class="ccli-modal-overlay">
+        <div class="ccli-modal-content">
+          <div class="ccli-modal-header">
+            <h2>${title}</h2>
+            <button class="ccli-modal-close">&times;</button>
+          </div>
+          <div class="ccli-modal-body">
+            <div class="ccli-modal-message">${message}</div>
+            <form class="ccli-modal-form" id="ccli-credential-form">
+              ${fields.map(field => `
+                <div class="ccli-form-group">
+                  <label for="${field.id}">${field.label}</label>
+                  <input 
+                    type="${field.type || "text"}" 
+                    id="${field.id}" 
+                    name="${field.id}"
+                    placeholder="${field.placeholder || ""}"
+                    value="${field.value || ""}"
+                    required
+                    autocomplete="off"
+                    autocapitalize="none"
+                    spellcheck="false"
+                  />
+                </div>
+              `).join("")}
+            </form>
+          </div>
+          <div class="ccli-modal-footer">
+            <button type="button" class="ccli-btn ccli-btn-secondary" id="ccli-modal-cancel">Cancel</button>
+            <button type="submit" form="ccli-credential-form" class="ccli-btn ccli-btn-primary">Save Credentials</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Add event listeners
+    this.addEventListeners();
+
+    document.body.appendChild(this.modal);
+  }
+
+  addEventListeners() {
+    // Close button
+    this.modal.querySelector(".ccli-modal-close").addEventListener("click", () => {
+      this.close(null);
+    });
+
+    // Cancel button
+    this.modal.querySelector("#ccli-modal-cancel").addEventListener("click", () => {
+      this.close(null);
+    });
+
+    // Overlay click
+    this.modal.querySelector(".ccli-modal-overlay").addEventListener("click", (e) => {
+      if (e.target === e.currentTarget) {
+        this.close(null);
+      }
+    });
+
+    // Form submission
+    this.modal.querySelector("#ccli-credential-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const values = Object.fromEntries(formData.entries());
+      this.close(values);
+    });
+
+    // Escape key
+    document.addEventListener("keydown", this.handleEscapeKey.bind(this));
+  }
+
+  handleEscapeKey(e) {
+    if (e.key === "Escape" && this.modal) {
+      this.close(null);
+    }
+  }
+
+  showModal() {
+    this.modal.classList.remove('ccli-modal-hidden');
+    this.modal.classList.add('ccli-modal-visible');
+    // Focus first input
+    setTimeout(() => {
+      const firstInput = this.modal.querySelector("input");
+      if (firstInput) firstInput.focus();
+    }, 100);
+  }
+
+  close(values) {
+    if (this.resolvePromise) {
+      this.resolvePromise(values);
+      this.resolvePromise = null;
+    }
+    this.remove();
+  }
+
+  remove() {
+    if (this.modal) {
+      document.removeEventListener("keydown", this.handleEscapeKey.bind(this));
+      this.modal.remove();
+      this.modal = null;
+    }
+  }
+}
+
 class TokenStorage {
   static ACCESS_TOKEN_KEY = "access_token";
   static REFRESH_TOKEN_KEY = "refresh_token";
@@ -773,13 +906,10 @@ class OAuthFlow {
   constructor() {
     this.client = new OAuthClient();
     this.tokenStorage = new TokenStorage();
+    this.onAuthCompleteCallback = null;
   }
 
   init() {
-    if (!this.tokenStorage.hasCredentials) {
-      this.tokenStorage.promptForCredentials();
-    }
-
     console.debug(`Window location: ${window.location.href}`);
 
     if (window.location.href.startsWith(OAuthClient.CONFIG.REDIRECT_URI)) {
@@ -801,9 +931,22 @@ class OAuthFlow {
     const authUrl = await this.client.generateAuthUrl();
     const popup = window.open(authUrl, "oauthPopup", this.popupFeatures);
     if (!popup || popup.closed || typeof popup.closed === "undefined") {
-      console.error(`Popup blocked! Please allow popups for this site.`);
-      alert("❌ Popup blocked! Please allow popups for this site.");
+      const message = [
+        "❌ Popup was blocked!",
+        "",
+        "To use this extension:",
+        "1. Allow popups for songselect.ccli.com",
+        "2. Try the import again",
+        "",
+        "The popup is needed to securely connect to Planning Center."
+      ].join("\n");
+      alert(message);
+      console.error("Popup blocked! Please allow popups for this site.");
+      return;
     }
+
+    // Show user feedback that login is in progress
+    console.info("🔐 Opening Planning Center login...");
   }
 
   _handleRedirect() {
@@ -822,6 +965,10 @@ class OAuthFlow {
     window.addEventListener("message", (event) => this._onMessage(event));
   }
 
+  setAuthCompleteCallback(callback) {
+    this.onAuthCompleteCallback = callback;
+  }
+
   _onMessage(event) {
     if (event.data?.type !== "oauth_complete" || !event.data.access_token) {
       console.debug("Invalid message received:", event.data);
@@ -829,7 +976,18 @@ class OAuthFlow {
     }
 
     this.tokenStorage.saveToken(event.data);
-    console.info("✅ Token received and stored.");
+    console.info("✅ Successfully connected to Planning Center!");
+    
+    // Check if we should automatically continue with import
+    const pendingImport = this.tokenStorage.getPendingImport();
+    if (pendingImport && this.onAuthCompleteCallback) {
+      console.info("🔄 Automatically continuing with pending import...");
+      this.tokenStorage.clearPendingImport();
+      // Use setTimeout to ensure the auth flow completes first
+      setTimeout(() => this.onAuthCompleteCallback(pendingImport), 100);
+    } else {
+      alert("✅ Successfully connected to Planning Center! You can now import songs.");
+    }
   }
 
   get popupFeatures() {
@@ -1240,6 +1398,256 @@ class PlanningCenterAPI {
   }
 }
 
+class ProgressIndicator {
+  constructor() {
+    this.modal = null;
+    this.progressBar = null;
+    this.statusText = null;
+    this.detailsText = null;
+    this.currentStep = 0;
+    this.totalSteps = 0;
+  }
+
+  show(title = "Processing...", totalSteps = 1) {
+    this.totalSteps = totalSteps;
+    this.currentStep = 0;
+    this.createModal(title);
+    this.showModal();
+  }
+
+  updateProgress(step, statusText, detailsText = "") {
+    if (!this.modal) {
+      return;
+    }
+
+    this.currentStep = step;
+    const percentage = Math.round((step / this.totalSteps) * 100);
+
+    // Remove any state classes and update width
+    this.progressBar.classList.remove('error', 'success', 'complete');
+    this.progressBar.style.width = `${percentage}%`;
+    this.statusText.textContent = statusText;
+    this.detailsText.textContent = detailsText;
+  }
+
+  setError(errorText, detailsText = "") {
+    if (!this.modal) {
+      return;
+    }
+
+    this.progressBar.classList.add('error');
+    this.statusText.textContent = "❌ " + errorText;
+    this.detailsText.textContent = detailsText;
+
+    // Add close button for errors
+    const closeBtn = document.createElement("button");
+    closeBtn.textContent = "Close";
+    closeBtn.className = "ccli-btn ccli-btn-secondary";
+    closeBtn.onclick = () => this.close();
+    this.modal.querySelector(".ccli-modal-footer").appendChild(closeBtn);
+  }
+
+  setSuccess(successText, detailsText = "") {
+    if (!this.modal) {
+      return;
+    }
+
+    this.progressBar.classList.add('success', 'complete');
+    this.statusText.textContent = "✅ " + successText;
+    this.detailsText.textContent = detailsText;
+
+    // Auto-close after 3 seconds
+    setTimeout(() => this.close(), 3000);
+  }
+
+  createModal(title) {
+    this.remove();
+
+    this.modal = document.createElement("div");
+    this.modal.id = "ccli-progress-modal";
+    this.modal.innerHTML = `
+      <div class="ccli-modal-overlay">
+        <div class="ccli-modal-content ccli-progress-content">
+          <div class="ccli-modal-header">
+            <h2>${title}</h2>
+          </div>
+          <div class="ccli-modal-body">
+            <div class="ccli-progress-container">
+              <div class="ccli-progress-bar-bg">
+                <div class="ccli-progress-bar"></div>
+              </div>
+              <div class="ccli-progress-status"></div>
+              <div class="ccli-progress-details"></div>
+            </div>
+          </div>
+          <div class="ccli-modal-footer"></div>
+        </div>
+      </div>
+    `;
+
+    this.progressBar = this.modal.querySelector(".ccli-progress-bar");
+    this.statusText = this.modal.querySelector(".ccli-progress-status");
+    this.detailsText = this.modal.querySelector(".ccli-progress-details");
+
+    document.body.appendChild(this.modal);
+  }
+
+  showModal() {
+    this.modal.classList.remove('ccli-modal-hidden');
+    this.modal.classList.add('ccli-modal-visible');
+  }
+
+  close() {
+    this.remove();
+  }
+
+  remove() {
+    if (this.modal) {
+      this.modal.remove();
+      this.modal = null;
+    }
+  }
+}
+
+class ConfirmationModal {
+  constructor() {
+    this.modal = null;
+    this.resolvePromise = null;
+    this.escapeHandler = null;
+    this.enterHandler = null;
+  }
+
+  /**
+   * Shows a custom confirmation dialog
+   * @param {string} title - Modal title
+   * @param {string} message - Confirmation message
+   * @param {string} confirmText - Text for confirm button (default: "Confirm")
+   * @param {string} cancelText - Text for cancel button (default: "Cancel")
+   * @param {string} confirmType - Button type: "primary", "danger" (default: "primary")
+   * @returns {Promise<boolean>} - Promise that resolves with true/false
+   */
+  show(title, message, confirmText = "Confirm", cancelText = "Cancel", confirmType = "primary") {
+    return new Promise((resolve) => {
+      this.resolvePromise = resolve;
+      this.createModal(title, message, confirmText, cancelText, confirmType);
+      this.showModal();
+    });
+  }
+
+  createModal(title, message, confirmText, cancelText, confirmType) {
+    this.remove();
+
+    this.modal = document.createElement("div");
+    this.modal.id = "ccli-confirmation-modal";
+    this.modal.innerHTML = `
+      <div class="ccli-modal-overlay">
+        <div class="ccli-modal-content ccli-confirmation-content">
+          <div class="ccli-modal-header">
+            <h2>${title}</h2>
+            <button class="ccli-modal-close">&times;</button>
+          </div>
+          <div class="ccli-modal-body">
+            <div class="ccli-confirmation-message">${message}</div>
+            <div class="ccli-confirmation-buttons">
+              <button type="button" class="ccli-btn ccli-btn-secondary" id="ccli-confirm-cancel">${cancelText}</button>
+              <button type="button" class="ccli-btn ccli-btn-${confirmType}" id="ccli-confirm-ok">${confirmText}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    this.addEventListeners();
+    document.body.appendChild(this.modal);
+  }
+
+  addEventListeners() {
+    // Store references for proper cleanup
+    this.escapeHandler = (e) => {
+      if (e.key === "Escape" && this.modal) {
+        e.preventDefault();
+        this.close(false);
+      }
+    };
+
+    this.enterHandler = (e) => {
+      if (e.key === "Enter" && this.modal) {
+        e.preventDefault();
+        this.close(true);
+      }
+    };
+
+    // Close button
+    this.modal.querySelector(".ccli-modal-close").addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.close(false);
+    });
+
+    // Cancel button
+    this.modal.querySelector("#ccli-confirm-cancel").addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.close(false);
+    });
+
+    // Confirm button
+    this.modal.querySelector("#ccli-confirm-ok").addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.close(true);
+    });
+
+    // Overlay click
+    this.modal.querySelector(".ccli-modal-overlay").addEventListener("click", (e) => {
+      if (e.target === e.currentTarget) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.close(false);
+      }
+    });
+
+    // Keyboard events
+    document.addEventListener("keydown", this.escapeHandler);
+    document.addEventListener("keydown", this.enterHandler);
+  }
+
+  showModal() {
+    this.modal.classList.remove('ccli-modal-hidden');
+    this.modal.classList.add('ccli-modal-visible');
+    // Focus confirm button
+    setTimeout(() => {
+      const confirmButton = this.modal.querySelector("#ccli-confirm-ok");
+      if (confirmButton) confirmButton.focus();
+    }, 100);
+  }
+
+  close(result) {
+    if (this.resolvePromise) {
+      this.resolvePromise(result);
+      this.resolvePromise = null;
+    }
+    this.remove();
+  }
+
+  remove() {
+    if (this.modal) {
+      // Clean up event listeners
+      if (this.escapeHandler) {
+        document.removeEventListener("keydown", this.escapeHandler);
+        this.escapeHandler = null;
+      }
+      if (this.enterHandler) {
+        document.removeEventListener("keydown", this.enterHandler);
+        this.enterHandler = null;
+      }
+      
+      this.modal.remove();
+      this.modal = null;
+    }
+  }
+}
+
 class App {
   constructor() {
     this.authFlow = new OAuthFlow();
@@ -1247,21 +1655,44 @@ class App {
     this.planningCenterAPI = new PlanningCenterAPI();
     this.songSelectAPI = new SongSelectAPI();
     this.songFinder = new SongFinder();
+    this.progressIndicator = new ProgressIndicator();
+    this.confirmationModal = new ConfirmationModal();
   }
 
   run() {
     this.authFlow.init();
+    // Set up callback for automatic import continuation
+    this.authFlow.setAuthCompleteCallback((pendingImport) => {
+      this.continueImportAfterAuth(pendingImport);
+    });
     GM_registerMenuCommand("⬇️ Import Song to Planning Center", () => this.importSongToPlanningCenter());
+  }
+
+  async continueImportAfterAuth(pendingImport) {
+    try {
+      console.info(`Continuing import for song ${pendingImport.songId}...`);
+      await this.performImport(pendingImport.songId, pendingImport.slug);
+    } catch (error) {
+      console.error("Failed to continue import after auth:", error);
+      alert([
+        "❌ Failed to continue import",
+        "",
+        "Please try importing the song again manually."
+      ].join("\n"));
+    }
   }
 
   async importSongToPlanningCenter() {
     try {
       if (!this.isCorrectPage()) {
-        alert("❌ You must be on a song page to use this.");
+        alert([
+          "❌ Wrong page!",
+          "",
+          "Please navigate to a song page on CCLI SongSelect first.",
+          "The URL should look like: https://songselect.ccli.com/songs/1234567/song-title"
+        ].join("\n"));
         return;
       }
-
-      await this.ensureValidToken();
 
       const ccliSongId = this.songFinder.getSongId();
       const slug = location.pathname.split("/").pop();
@@ -1326,54 +1757,93 @@ class App {
       progress.updateProgress(1, "Getting song information...", "Reading CCLI song data");
       const songDetails = await this.songSelectAPI.fetchSongDetails(ccliSongId, slug);
 
-      // If song exists, confirm update; otherwise create new
+      // Step 2: Check if song exists
+      progress.updateProgress(2, "Checking Planning Center...", "Looking for existing song");
+      const existingSong = await this.planningCenterAPI.findSongById(ccliSongId).catch(console.debug);
+
       if (existingSong && !await this.confirmSongUpdate()) {
+        progress.close();
         return;
       }
 
-      const songId = existingSong?.id || await this.createNewSong(ccliSongId, songDetails);
-      if (!songId) return;
+      // Step 3: Create or get song
+      let songId;
+      if (existingSong) {
+        progress.updateProgress(3, "Using existing song...", `Found: ${songDetails.title}`);
+        songId = existingSong.id;
+      } else {
+        progress.updateProgress(3, "Creating new song...", `Adding: ${songDetails.title}`);
+        songId = await this.createNewSong(ccliSongId, songDetails);
+        if (!songId) {
+          progress.setError("Failed to create song", "Could not add song to Planning Center");
+          return;
+        }
+      }
 
-      // Get or create arrangement
+      // Step 4: Get arrangement
+      progress.updateProgress(4, "Setting up arrangement...", "Configuring song structure");
       const arrangementId = await this.getArrangementId(songId, songDetails);
-      if (!arrangementId) return;
-
-      // Update with ChordPro content
-      if (!await this.updateArrangementWithChordPro(songId, arrangementId, songDetails)) {
+      if (!arrangementId) {
+        progress.setError("Failed to get arrangement", "Could not access song arrangement");
         return;
       }
 
-      // Ensure key exists
+      // Step 5: Update with ChordPro
+      progress.updateProgress(5, "Downloading ChordPro...", "Getting chord charts from CCLI");
+      if (!await this.updateArrangementWithChordPro(songId, arrangementId, songDetails)) {
+        progress.setError("Failed to update chords", "Could not download or apply chord chart");
+        return;
+      }
+
+      // Step 6: Setup keys
+      progress.updateProgress(6, "Setting up keys...", `Configuring key: ${songDetails.key}`);
       await this.ensureArrangementKeyExists(songId, arrangementId, songDetails.key);
 
-      // Upload leadsheet if available
+      // Step 7: Upload additional files
+      progress.updateProgress(7, "Uploading additional files...", "Adding leadsheets and vocal sheets");
       await this.uploadLeadsheetIfAvailable(songDetails, songId, arrangementId);
-
-      // Upload vocal sheet if available
       await this.uploadVocalSheetIfAvailable(songDetails, songId, arrangementId);
 
-      alert("✅ Song has been added to Planning Center!");
+      progress.setSuccess("Song imported successfully!", `${songDetails.title} is now available in Planning Center`);
+
     } catch (error) {
       console.error("Import failed:", error);
-      alert(`❌ Import failed: ${error.message}`);
-    }
-  }
 
-  async ensureValidToken() {
-    if (!this.tokenStorage.isTokenValid) {
-      console.debug("Token is invalid or expired. Attempting to refresh...");
-      await this.authFlow.refreshToken().catch(err => {
-        console.error("Failed to refresh token:", err);
-        alert("❌ Could not access Planning Center. Please log in and try again.");
-        this.authFlow.startLogin();
-        throw new Error("Aborting import due to user not being logged in.");
-      });
+      let errorMessage = "Import failed";
+      let errorDetails = error.message;
+
+      if (error.message.includes("No song found")) {
+        errorMessage = "Song not found";
+        errorDetails = "This song is not in your Planning Center library yet, but the import will create it.";
+      } else if (error.message.includes("401") || error.message.includes("Unauthorized")) {
+        errorMessage = "Authentication failed";
+        errorDetails = "Please try the import again to re-authenticate.";
+      } else if (error.message.includes("403") || error.message.includes("Forbidden")) {
+        errorMessage = "Permission denied";
+        errorDetails = "You don't have permission to add songs to Planning Center. Please check with your administrator.";
+      }
+
+      if (progress) {
+        progress.setError(errorMessage, errorDetails);
+      } else {
+        alert(`❌ ${errorMessage}: ${errorDetails}`);
+      }
     }
   }
 
   async confirmSongUpdate() {
     console.info("Song already exists in Planning Center.");
-    return confirm("This song already exists in Planning Center. Do you want to update the default arrangement with the current ChordPro and leadsheet?");
+    
+    const title = "Song Already Exists";
+    const message = "This song already exists in Planning Center. Do you want to update the default arrangement with the current ChordPro and leadsheet?";
+    
+    return await this.confirmationModal.show(
+      title,
+      message,
+      "Update Song",
+      "Cancel",
+      "primary"
+    );
   }
 
   async createNewSong(ccliSongId, songDetails) {
@@ -1388,8 +1858,7 @@ class App {
       return createdSong.id;
     } catch (error) {
       console.error("Failed to add song:", error);
-      alert("❌ Failed to add song.");
-      return null;
+      throw new Error("Failed to add song to Planning Center");
     }
   }
 
@@ -1411,8 +1880,7 @@ class App {
       return arrangementId;
     } catch (err) {
       console.error("Failed to fetch arrangements:", err);
-      alert("❌ Failed to fetch arrangements.");
-      return null;
+      throw new Error("Failed to fetch song arrangements");
     }
   }
 
@@ -1433,8 +1901,7 @@ class App {
       return true;
     } catch (err) {
       console.error("Failed to update arrangement with ChordPro:", err);
-      alert("❌ Failed to update arrangement with ChordPro.");
-      return false;
+      throw new Error("Failed to update arrangement with ChordPro");
     }
   }
 
