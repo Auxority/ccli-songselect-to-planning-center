@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>CCLI to Planning Center</title>
+    <style>
+      body {
+        width: 300px;
+        padding: 16px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          sans-serif;
+        margin: 0;
+      }
+
+      h1 {
+        font-size: 18px;
+        margin: 0 0 16px 0;
+        color: #111827;
+      }
+
+      .status {
+        padding: 12px;
+        border-radius: 8px;
+        margin-bottom: 16px;
+        font-size: 14px;
+      }
+
+      .status.connected {
+        background: #ecfdf5;
+        color: #065f46;
+        border: 1px solid #a7f3d0;
+      }
+
+      .status.disconnected {
+        background: #fef9e7;
+        color: #92400e;
+        border: 1px solid #fde68a;
+      }
+
+      .btn {
+        width: 100%;
+        padding: 12px 16px;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        margin-bottom: 16px;
+        transition: background-color 0.2s;
+      }
+
+      .btn-primary {
+        background: #3b82f6;
+        color: white;
+      }
+
+      .btn-primary:hover {
+        background: #2563eb;
+      }
+
+      .instructions {
+        font-size: 12px;
+        color: #6b7280;
+        line-height: 1.4;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>CCLI to Planning Center</h1>
+
+    <div id="status" class="status disconnected">
+      <span id="status-text">🔐 Will connect when importing</span>
+    </div>
+
+    <button id="import-btn" class="btn btn-primary">Import Current Song</button>
+
+    <div class="instructions">
+      <p><strong>How to use:</strong></p>
+      <ol>
+        <li>Navigate to a song on CCLI SongSelect</li>
+        <li>Click "Import Current Song"</li>
+        <li>Login to Planning Center if prompted</li>
+      </ol>
+      <p>
+        The extension will automatically handle authentication and import the
+        chord chart, lyrics, and available sheet music.
+      </p>
+    </div>
+
+    <script src="popup.js" defer></script>
+  </body>
+</html>

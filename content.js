@@ -1,300 +1,59 @@
-// ==UserScript==
-// @name        Download CCLI ChordPro for PlanningCenter
-// @namespace   Violentmonkey Scripts
-// @match       https://songselect.ccli.com/*
-// @match       https://services.planningcenteronline.com/*
-// @grant       GM_setClipboard
-// @grant       GM_getValue
-// @grant       GM_setValue
-// @grant       GM_deleteValue
-// @grant       GM_xmlhttpRequest
-// @grant       GM_registerMenuCommand
-// @grant       GM_download
-// @grant       GM_addStyle
-// @version     0.11.0
-// @author      aux
-// @downloadURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
-// @updateURL https://github.com/Auxority/ccli-songselect-to-planning-center/raw/refs/heads/main/index.user.js
-// ==/UserScript==
-
-GM_addStyle(`
-#ccli-confirmation-modal, #ccli-progress-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 999999;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-}
-
-.ccli-modal-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: ccli-fadeIn 0.2s ease-out;
-  z-index: 1;
-  padding: 16px;
-  box-sizing: border-box;
-}
-
-.ccli-modal-content {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-  width: 100%;
-  max-width: 500px;
-  max-height: 90vh;
-  overflow-y: auto;
-  animation: ccli-slideIn 0.3s ease-out;
-  position: relative;
-  z-index: 2;
-  margin: auto;
-}
-
-.ccli-modal-header {
-  padding: 24px 24px 16px;
-  border-bottom: 1px solid #e5e7eb;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.ccli-modal-header h2 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
-  color: #111827;
-}
-
-.ccli-modal-close {
-  background: none;
-  border: none;
-  font-size: 24px;
-  cursor: pointer;
-  color: #6b7280;
-  padding: 4px;
-  border-radius: 6px;
-  transition: all 0.2s;
-  line-height: 1;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.ccli-modal-close:hover {
-  background: #f3f4f6;
-  color: #374151;
-}
-
-.ccli-modal-body {
-  padding: 20px 24px;
-}
-
-.ccli-modal-footer {
-  padding: 16px 24px 24px;
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-}
-
-.ccli-btn {
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: none;
-  display: inline-block;
-  text-align: center;
-  text-decoration: none;
-  user-select: none;
-  vertical-align: middle;
-}
-
-.ccli-btn-primary {
-  background: #3b82f6;
-  color: white;
-}
-
-.ccli-btn-primary:hover {
-  background: #2563eb;
-}
-
-.ccli-btn-secondary {
-  background: #f3f4f6;
-  color: #374151;
-  border: 1px solid #d1d5db;
-}
-
-.ccli-btn-secondary:hover {
-  background: #e5e7eb;
-}
-
-.ccli-progress-container {
-  text-align: center;
-}
-
-.ccli-progress-bar-bg {
-  width: 100%;
-  height: 8px;
-  background: #e5e7eb;
-  border-radius: 4px;
-  overflow: hidden;
-  margin-bottom: 16px;
-}
-
-.ccli-progress-bar {
-  height: 100%;
-  background: #3b82f6;
-  border-radius: 4px;
-  width: 0%;
-  transition: width 0.3s ease, background-color 0.3s ease;
-}
-
-.ccli-progress-bar.error {
-  background-color: #dc3545;
-}
-
-.ccli-progress-bar.success {
-  background-color: #28a745;
-}
-
-.ccli-progress-bar.complete {
-  width: 100%;
-}
-
-.ccli-progress-status {
-  font-size: 16px;
-  font-weight: 500;
-  color: #111827;
-  margin-bottom: 8px;
-}
-
-.ccli-progress-details {
-  font-size: 14px;
-  color: #6b7280;
-  margin-bottom: 16px;
-}
-
-.ccli-confirmation-content .ccli-modal-body {
-  text-align: center;
-}
-
-.ccli-confirmation-message {
-  font-size: 16px;
-  color: #374151;
-  margin-bottom: 24px;
-  line-height: 1.5;
-}
-
-.ccli-confirmation-buttons {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-  align-items: center;
-  position: relative;
-  z-index: 1;
-}
-
-.ccli-confirmation-buttons .ccli-btn {
-  min-width: 100px;
-}
-
-.ccli-btn-danger {
-  background: #dc3545;
-  color: white;
-}
-
-.ccli-btn-danger:hover {
-  background: #c82333;
-}
-
-.ccli-modal-hidden {
-  display: none;
-}
-
-.ccli-modal-visible {
-  display: block;
-}
-
-@media (max-width: 768px) {
-  .ccli-modal-overlay {
-    padding: 8px;
-    align-items: flex-start;
-    padding-top: 20px;
+// Browser extension storage wrapper
+class ExtensionStorage {
+  static async getValue(key, defaultValue = null) {
+    return new Promise((resolve) => {
+      browser.storage.local.get({ [key]: defaultValue }).then((result) => {
+        resolve(result[key]);
+      });
+    });
   }
-  
-  .ccli-modal-content {
-    max-height: calc(100vh - 40px);
-    border-radius: 8px;
+
+  static async setValue(key, value) {
+    return browser.storage.local.set({ [key]: value });
   }
-  
-  .ccli-modal-header {
-    padding: 16px 16px 12px !important;
-  }
-  
-  .ccli-modal-body {
-    padding: 16px !important;
-  }
-  
-  .ccli-modal-footer {
-    padding: 12px 16px 16px !important;
-    flex-direction: column;
-    gap: 8px;
-  }
-  
-  .ccli-btn {
-    width: 100%;
-    order: 2;
-  }
-  
-  .ccli-btn-primary {
-    order: 1;
+
+  static async deleteValue(key) {
+    return browser.storage.local.remove(key);
   }
 }
 
-@media (max-width: 480px) {
-  .ccli-modal-overlay {
-    padding: 4px;
-    padding-top: 10px;
+// HTTP Client for extension
+class ExtensionHttpClient {
+  constructor() { }
+
+  async get(url, headers = {}) {
+    return this.performRequest("GET", url, headers);
   }
-  
-  .ccli-modal-content {
-    max-height: calc(100vh - 20px);
+
+  async post(url, headers = {}, data = null) {
+    return this.performRequest("POST", url, headers, data);
   }
-  
-  .ccli-modal-header h2 {
-    font-size: 18px;
+
+  async patch(url, headers = {}, data = null) {
+    return this.performRequest("PATCH", url, headers, data);
+  }
+
+  async performRequest(method, url, headers = {}, data = null) {
+    // Send request to background script to bypass CORS
+    return new Promise((resolve, reject) => {
+      browser.runtime.sendMessage({
+        action: "http_request",
+        method,
+        url,
+        headers,
+        data
+      }, (response) => {
+        if (response.error) {
+          reject(new Error(response.error));
+        } else {
+          resolve(response);
+        }
+      });
+    });
   }
 }
 
-@keyframes ccli-fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes ccli-slideIn {
-  from { 
-    opacity: 0;
-    transform: translateY(-20px) scale(0.95);
-  }
-  to { 
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-`);
-
+// Copy all classes from userscript but modify GM_ functions
 class IntegerParser {
   /**
    * Parses a valid finite integer from a string
@@ -525,260 +284,70 @@ class SongSelectAPI {
   }
 }
 
-class CredentialModal {
-  constructor() {
-    this.modal = null;
-    this.resolvePromise = null;
-  }
-
-  /**
-   * Shows a custom modal for credential input
-   * @param {string} title - Modal title
-   * @param {string} message - Instructions message
-   * @param {Array} fields - Array of field objects {id, label, type, placeholder}
-   * @returns {Promise<Object>} - Promise that resolves with field values
-   */
-  show(title, message, fields) {
-    return new Promise((resolve, _) => {
-      this.resolvePromise = resolve;
-      this.createModal(title, message, fields);
-      this.showModal();
-    });
-  }
-
-  createModal(title, message, fields) {
-    // Remove existing modal if any
-    this.remove();
-
-    this.modal = document.createElement("div");
-    this.modal.id = "ccli-credential-modal";
-    this.modal.innerHTML = `
-      <div class="ccli-modal-overlay">
-        <div class="ccli-modal-content">
-          <div class="ccli-modal-header">
-            <h2>${title}</h2>
-            <button class="ccli-modal-close">&times;</button>
-          </div>
-          <div class="ccli-modal-body">
-            <div class="ccli-modal-message">${message}</div>
-            <form class="ccli-modal-form" id="ccli-credential-form">
-              ${fields.map(field => `
-                <div class="ccli-form-group">
-                  <label for="${field.id}">${field.label}</label>
-                  <input 
-                    type="${field.type || "text"}" 
-                    id="${field.id}" 
-                    name="${field.id}"
-                    placeholder="${field.placeholder || ""}"
-                    value="${field.value || ""}"
-                    required
-                    autocomplete="off"
-                    autocapitalize="none"
-                    spellcheck="false"
-                  />
-                </div>
-              `).join("")}
-            </form>
-          </div>
-          <div class="ccli-modal-footer">
-            <button type="button" class="ccli-btn ccli-btn-secondary" id="ccli-modal-cancel">Cancel</button>
-            <button type="submit" form="ccli-credential-form" class="ccli-btn ccli-btn-primary">Save Credentials</button>
-          </div>
-        </div>
-      </div>
-    `;
-
-    // Add event listeners
-    this.addEventListeners();
-
-    document.body.appendChild(this.modal);
-  }
-
-  addEventListeners() {
-    // Close button
-    this.modal.querySelector(".ccli-modal-close").addEventListener("click", () => {
-      this.close(null);
-    });
-
-    // Cancel button
-    this.modal.querySelector("#ccli-modal-cancel").addEventListener("click", () => {
-      this.close(null);
-    });
-
-    // Overlay click
-    this.modal.querySelector(".ccli-modal-overlay").addEventListener("click", (e) => {
-      if (e.target === e.currentTarget) {
-        this.close(null);
-      }
-    });
-
-    // Form submission
-    this.modal.querySelector("#ccli-credential-form").addEventListener("submit", (e) => {
-      e.preventDefault();
-      const formData = new FormData(e.target);
-      const values = Object.fromEntries(formData.entries());
-      this.close(values);
-    });
-
-    // Escape key
-    document.addEventListener("keydown", this.handleEscapeKey.bind(this));
-  }
-
-  handleEscapeKey(e) {
-    if (e.key === "Escape" && this.modal) {
-      this.close(null);
-    }
-  }
-
-  showModal() {
-    this.modal.classList.remove('ccli-modal-hidden');
-    this.modal.classList.add('ccli-modal-visible');
-    // Focus first input
-    setTimeout(() => {
-      const firstInput = this.modal.querySelector("input");
-      if (firstInput) firstInput.focus();
-    }, 100);
-  }
-
-  close(values) {
-    if (this.resolvePromise) {
-      this.resolvePromise(values);
-      this.resolvePromise = null;
-    }
-    this.remove();
-  }
-
-  remove() {
-    if (this.modal) {
-      document.removeEventListener("keydown", this.handleEscapeKey.bind(this));
-      this.modal.remove();
-      this.modal = null;
-    }
-  }
-}
-
 class TokenStorage {
   static ACCESS_TOKEN_KEY = "access_token";
   static REFRESH_TOKEN_KEY = "refresh_token";
   static EXPIRES_AT_KEY = "expires_at";
   static PENDING_IMPORT_KEY = "pending_import";
   static CODE_VERIFIER_KEY = "code_verifier";
-  static TEN_MINUTES_IN_MS = 10 * 60 * 1000; // 10 minutes in milliseconds
+  static TEN_MINUTES_IN_MS = 10 * 60 * 1000;
 
-  static pendingImport = null;
-
-  saveToken(tokenData) {
-    GM_setValue(TokenStorage.ACCESS_TOKEN_KEY, tokenData.access_token);
-    GM_setValue(TokenStorage.REFRESH_TOKEN_KEY, tokenData.refresh_token);
-    GM_setValue(TokenStorage.EXPIRES_AT_KEY, Date.now() + tokenData.expires_in * 1000);
-  }
-  
-  saveCodeVerifier(codeVerifier) {
-    GM_setValue(TokenStorage.CODE_VERIFIER_KEY, codeVerifier);
+  async saveToken(tokenData) {
+    await ExtensionStorage.setValue(TokenStorage.ACCESS_TOKEN_KEY, tokenData.access_token);
+    await ExtensionStorage.setValue(TokenStorage.REFRESH_TOKEN_KEY, tokenData.refresh_token);
+    await ExtensionStorage.setValue(TokenStorage.EXPIRES_AT_KEY, Date.now() + tokenData.expires_in * 1000);
   }
 
-  getCodeVerifier() {
-    return GM_getValue(TokenStorage.CODE_VERIFIER_KEY, null);
+  async saveCodeVerifier(codeVerifier) {
+    await ExtensionStorage.setValue(TokenStorage.CODE_VERIFIER_KEY, codeVerifier);
   }
 
-  clearCodeVerifier() {
-    GM_deleteValue(TokenStorage.CODE_VERIFIER_KEY);
+  async getCodeVerifier() {
+    return await ExtensionStorage.getValue(TokenStorage.CODE_VERIFIER_KEY, null);
   }
 
-  setPendingImport(songId, slug) {
+  async clearCodeVerifier() {
+    await ExtensionStorage.deleteValue(TokenStorage.CODE_VERIFIER_KEY);
+  }
+
+  async setPendingImport(songId, slug) {
     const data = JSON.stringify({ songId, slug, timestamp: Date.now() });
-    GM_setValue(TokenStorage.PENDING_IMPORT_KEY, data);
+    await ExtensionStorage.setValue(TokenStorage.PENDING_IMPORT_KEY, data);
   }
 
-  getPendingImport() {
-    const pendingImport = GM_getValue(TokenStorage.PENDING_IMPORT_KEY, null);
-    if (!pendingImport) {
-      return null;
-    }
-    
+  async getPendingImport() {
+    const pendingImport = await ExtensionStorage.getValue(TokenStorage.PENDING_IMPORT_KEY, null);
+    if (!pendingImport) return null;
+
     try {
       const data = JSON.parse(pendingImport);
-      // Check if pending import is less than 10 minutes old
       if (Date.now() - data.timestamp > TokenStorage.TEN_MINUTES_IN_MS) {
-        this.clearPendingImport();
+        await this.clearPendingImport();
         return null;
       }
       return data;
     } catch {
-      this.clearPendingImport();
+      await this.clearPendingImport();
       return null;
     }
   }
 
-  clearPendingImport() {
-    GM_deleteValue(TokenStorage.PENDING_IMPORT_KEY);
+  async clearPendingImport() {
+    await ExtensionStorage.deleteValue(TokenStorage.PENDING_IMPORT_KEY);
   }
 
-  get accessToken() {
-    return GM_getValue(TokenStorage.ACCESS_TOKEN_KEY, null);
+  async getAccessToken() {
+    return await ExtensionStorage.getValue(TokenStorage.ACCESS_TOKEN_KEY, null);
   }
 
-  get refreshToken() {
-    return GM_getValue(TokenStorage.REFRESH_TOKEN_KEY, null);
+  async getRefreshToken() {
+    return await ExtensionStorage.getValue(TokenStorage.REFRESH_TOKEN_KEY, null);
   }
 
-  get isTokenValid() {
-    const raw = GM_getValue(TokenStorage.EXPIRES_AT_KEY, 0);
+  async isTokenValid() {
+    const raw = await ExtensionStorage.getValue(TokenStorage.EXPIRES_AT_KEY, 0);
     const expiresAt = Number(raw);
     return Date.now() < expiresAt;
-  }
-}
-
-class GMHttpClient {
-  constructor() {
-  }
-
-  get(url, headers = {}) {
-    return this.performRequest({
-      method: "GET",
-      url: url,
-      headers: headers,
-    });
-  }
-
-  post(url, headers = {}, data = {}) {
-    return this.performRequest({
-      method: "POST",
-      url: url,
-      headers: headers,
-      data: data,
-    });
-  }
-
-  patch(url, headers = {}, data = {}) {
-    return this.performRequest({
-      method: "PATCH",
-      url: url,
-      headers: headers,
-      data: data,
-    });
-  }
-
-  /**
-   * Sends a GM_xmlhttpRequest and returns a Promise.
-   * @param {Object} options - Same options as GM_xmlhttpRequest.
-   * @returns {Promise<Object>} - Resolves with the response or rejects on error.
-   */
-  performRequest(options) {
-    return new Promise((resolve, reject) => {
-      GM_xmlhttpRequest({
-        ...options,
-        onload: (response) => {
-          if (response.status >= 200 && response.status < 300) {
-            resolve(response);
-          } else {
-            reject(response);
-          }
-        },
-        onerror: reject,
-        ontimeout: reject,
-      });
-    });
   }
 }
 
@@ -793,11 +362,11 @@ class OAuthClient {
 
   constructor() {
     this.tokenStorage = new TokenStorage();
-    this.gmHttpClient = new GMHttpClient();
+    this.httpClient = new ExtensionHttpClient();
   }
 
   async exchangeCodeForToken(code) {
-    const codeVerifier = this.tokenStorage.getCodeVerifier();
+    const codeVerifier = await this.tokenStorage.getCodeVerifier();
     if (!codeVerifier) {
       throw new Error("Code verifier not found. Please restart the authentication process.");
     }
@@ -806,10 +375,10 @@ class OAuthClient {
 
     console.info("🔄 Attempting to exchange code for token...");
 
-    const response = await this.gmHttpClient.post(OAuthClient.CONFIG.TOKEN_URL, this.headers, searchParams.toString());
+    const response = await this.httpClient.post(OAuthClient.CONFIG.TOKEN_URL, this.headers, searchParams.toString());
     const result = JSON.parse(response.responseText);
-    this.tokenStorage.saveToken(result);
-    this.tokenStorage.clearCodeVerifier();
+    await this.tokenStorage.saveToken(result);
+    await this.tokenStorage.clearCodeVerifier();
 
     if (window.opener) {
       window.opener.postMessage({
@@ -835,9 +404,10 @@ class OAuthClient {
   async refreshAccessToken() {
     console.info("🔄 Attempting to refresh token...");
 
-    const searchParams = this.generateRefreshTokenSearchParams();
+    const refreshToken = await this.tokenStorage.getRefreshToken();
+    const searchParams = this.generateRefreshTokenSearchParams(refreshToken);
 
-    const response = await this.gmHttpClient.post(OAuthClient.CONFIG.TOKEN_URL, this.headers, searchParams.toString()).catch(err => {
+    const response = await this.httpClient.post(OAuthClient.CONFIG.TOKEN_URL, this.headers, searchParams.toString()).catch(err => {
       console.error("🔁 Token refresh failed:", err);
       alert("Refresh token is invalid or expired. Please log in again.");
       throw new Error("Refresh request failed:", err);
@@ -846,17 +416,17 @@ class OAuthClient {
     this.onSuccessfulRefreshResponse(response);
   }
 
-  generateRefreshTokenSearchParams() {
+  generateRefreshTokenSearchParams(refreshToken) {
     return new URLSearchParams({
       grant_type: "refresh_token",
-      refresh_token: this.tokenStorage.refreshToken,
+      refresh_token: refreshToken,
       client_id: OAuthClient.CONFIG.CLIENT_ID,
     });
   }
 
-  onSuccessfulRefreshResponse(response) {
+  async onSuccessfulRefreshResponse(response) {
     const result = JSON.parse(response.responseText);
-    this.tokenStorage.saveToken(result);
+    await this.tokenStorage.saveToken(result);
     console.info("✅ Token refreshed successfully.");
   }
 
@@ -870,7 +440,7 @@ class OAuthClient {
     const codeVerifier = this.generateCodeVerifier();
     const codeChallenge = await this.generateCodeChallenge(codeVerifier);
 
-    this.tokenStorage.saveCodeVerifier(codeVerifier);
+    await this.tokenStorage.saveCodeVerifier(codeVerifier);
 
     const state = Math.random().toString(36).substring(2);
     const params = new URLSearchParams({
@@ -890,19 +460,19 @@ class OAuthClient {
     const array = new Uint8Array(32);
     crypto.getRandomValues(array);
     return btoa(String.fromCharCode(...array))
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=/g, '');
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=/g, "");
   }
 
   async generateCodeChallenge(codeVerifier) {
     const encoder = new TextEncoder();
     const data = encoder.encode(codeVerifier);
-    const digest = await crypto.subtle.digest('SHA-256', data);
+    const digest = await crypto.subtle.digest("SHA-256", data);
     return btoa(String.fromCharCode(...new Uint8Array(digest)))
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=/g, '');
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=/g, "");
   }
 }
 
@@ -927,7 +497,8 @@ class OAuthFlow {
   }
 
   async refreshToken() {
-    if (this.tokenStorage.refreshToken) {
+    const refreshToken = await this.tokenStorage.getRefreshToken();
+    if (refreshToken) {
       await this.client.refreshAccessToken();
     } else {
       throw new Error("No refresh token available. Please log in again.");
@@ -976,20 +547,20 @@ class OAuthFlow {
     this.onAuthCompleteCallback = callback;
   }
 
-  _onMessage(event) {
+  async _onMessage(event) {
     if (event.data?.type !== "oauth_complete" || !event.data.access_token) {
       console.debug("Invalid message received:", event.data);
       return;
     }
 
-    this.tokenStorage.saveToken(event.data);
+    await this.tokenStorage.saveToken(event.data);
     console.info("✅ Successfully connected to Planning Center!");
-    
+
     // Check if we should automatically continue with import
-    const pendingImport = this.tokenStorage.getPendingImport();
+    const pendingImport = await this.tokenStorage.getPendingImport();
     if (pendingImport && this.onAuthCompleteCallback) {
       console.info("🔄 Automatically continuing with pending import...");
-      this.tokenStorage.clearPendingImport();
+      await this.tokenStorage.clearPendingImport();
       // Use setTimeout to ensure the auth flow completes first
       setTimeout(() => this.onAuthCompleteCallback(pendingImport), 100);
     } else {
@@ -1219,7 +790,7 @@ class PlanningCenterAPI {
 
   constructor() {
     this.tokenStorage = new TokenStorage();
-    this.gmHttpClient = new GMHttpClient();
+    this.httpClient = new ExtensionHttpClient();
   }
 
   async findSongById(ccliID) {
@@ -1323,7 +894,7 @@ class PlanningCenterAPI {
     const formData = new FormData();
     formData.append("file", blob, filename);
 
-    const response = await this.gmHttpClient.post(PlanningCenterAPI.FILE_UPLOAD_ENDPOINT, null, formData);
+    const response = await this.httpClient.post(PlanningCenterAPI.FILE_UPLOAD_ENDPOINT, null, formData);
     if (response.status < 200 || response.status >= 300) {
       throw new Error(`Failed to upload ${filename}.`);
     }
@@ -1379,16 +950,17 @@ class PlanningCenterAPI {
 
   async _request(method, endpoint, payload = null) {
     const url = `${PlanningCenterAPI.BASE_URL}${endpoint}`;
+    const defaultHeaders = await this.getDefaultHeaders();
     let response;
     switch (method) {
       case "GET":
-        response = await this.gmHttpClient.get(url, this.defaultHeaders);
+        response = await this.httpClient.get(url, defaultHeaders);
         break;
       case "POST":
-        response = await this.gmHttpClient.post(url, this.defaultHeaders, JSON.stringify(payload));
+        response = await this.httpClient.post(url, defaultHeaders, JSON.stringify(payload));
         break;
       case "PATCH":
-        response = await this.gmHttpClient.patch(url, this.defaultHeaders, JSON.stringify(payload));
+        response = await this.httpClient.patch(url, defaultHeaders, JSON.stringify(payload));
         break;
       default:
         throw new Error(`Unsupported HTTP method: ${method}`);
@@ -1397,9 +969,10 @@ class PlanningCenterAPI {
     return JSON.parse(response.responseText);
   }
 
-  get defaultHeaders() {
+  async getDefaultHeaders() {
+    const accessToken = await this.tokenStorage.getAccessToken();
     return {
-      "Authorization": `Bearer ${this.tokenStorage.accessToken}`,
+      "Authorization": `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     };
   }
@@ -1431,7 +1004,7 @@ class ProgressIndicator {
     const percentage = Math.round((step / this.totalSteps) * 100);
 
     // Remove any state classes and update width
-    this.progressBar.classList.remove('error', 'success', 'complete');
+    this.progressBar.classList.remove("error", "success", "complete");
     this.progressBar.style.width = `${percentage}%`;
     this.statusText.textContent = statusText;
     this.detailsText.textContent = detailsText;
@@ -1442,7 +1015,7 @@ class ProgressIndicator {
       return;
     }
 
-    this.progressBar.classList.add('error');
+    this.progressBar.classList.add("error");
     this.statusText.textContent = "❌ " + errorText;
     this.detailsText.textContent = detailsText;
 
@@ -1459,7 +1032,7 @@ class ProgressIndicator {
       return;
     }
 
-    this.progressBar.classList.add('success', 'complete');
+    this.progressBar.classList.add("success", "complete");
     this.statusText.textContent = "✅ " + successText;
     this.detailsText.textContent = detailsText;
 
@@ -1500,8 +1073,8 @@ class ProgressIndicator {
   }
 
   showModal() {
-    this.modal.classList.remove('ccli-modal-hidden');
-    this.modal.classList.add('ccli-modal-visible');
+    this.modal.classList.remove("ccli-modal-hidden");
+    this.modal.classList.add("ccli-modal-visible");
   }
 
   close() {
@@ -1513,6 +1086,63 @@ class ProgressIndicator {
       this.modal.remove();
       this.modal = null;
     }
+  }
+}
+
+class TemplateLoader {
+  static cache = new Map();
+
+  static async loadTemplate(templateName) {
+    if (this.cache.has(templateName)) {
+      return this.cache.get(templateName);
+    }
+
+    try {
+      const url = browser.runtime.getURL(`templates/${templateName}.html`);
+      const response = await fetch(url);
+      const html = await response.text();
+      this.cache.set(templateName, html);
+      return html;
+    } catch (error) {
+      console.error(`Failed to load template ${templateName}:`, error);
+      throw error;
+    }
+  }
+
+  static populateTemplate(html, data) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+    const container = doc.body.firstElementChild;
+
+    // Replace text content for data-template attributes
+    Object.entries(data).forEach(([key, value]) => {
+      const element = container.querySelector(`[data-template="${key}"]`);
+      if (element) {
+        if (key === "form" && Array.isArray(value)) {
+          // Special handling for form fields
+          element.innerHTML = value.map(field => `
+            <div class="ccli-form-group">
+              <label for="${field.id}">${field.label}</label>
+              <input 
+                type="${field.type || "text"}" 
+                id="${field.id}" 
+                name="${field.id}"
+                placeholder="${field.placeholder || ""}"
+                value="${field.value || ""}"
+                required
+                autocomplete="off"
+                autocapitalize="none"
+                spellcheck="false"
+              />
+            </div>
+          `).join("");
+        } else {
+          element.textContent = value;
+        }
+      }
+    });
+
+    return container;
   }
 }
 
@@ -1533,38 +1163,34 @@ class ConfirmationModal {
    * @param {string} confirmType - Button type: "primary", "danger" (default: "primary")
    * @returns {Promise<boolean>} - Promise that resolves with true/false
    */
-  show(title, message, confirmText = "Confirm", cancelText = "Cancel", confirmType = "primary") {
-    return new Promise((resolve) => {
+  async show(title, message, confirmText = "Confirm", cancelText = "Cancel", confirmType = "primary") {
+    return new Promise(async (resolve) => {
       this.resolvePromise = resolve;
-      this.createModal(title, message, confirmText, cancelText, confirmType);
+      await this.createModal(title, message, confirmText, cancelText, confirmType);
+      this.addEventListeners();
       this.showModal();
     });
   }
 
-  createModal(title, message, confirmText, cancelText, confirmType) {
+  async createModal(title, message, confirmText, cancelText, confirmType) {
     this.remove();
+
+    const html = await TemplateLoader.loadTemplate("confirmation-modal");
+    const content = TemplateLoader.populateTemplate(html, {
+      title,
+      message,
+      confirmText,
+      cancelText
+    });
+
+    // Update button type
+    const confirmBtn = content.querySelector("#ccli-confirm-ok");
+    confirmBtn.className = `ccli-btn ccli-btn-${confirmType}`;
 
     this.modal = document.createElement("div");
     this.modal.id = "ccli-confirmation-modal";
-    this.modal.innerHTML = `
-      <div class="ccli-modal-overlay">
-        <div class="ccli-modal-content ccli-confirmation-content">
-          <div class="ccli-modal-header">
-            <h2>${title}</h2>
-            <button class="ccli-modal-close">&times;</button>
-          </div>
-          <div class="ccli-modal-body">
-            <div class="ccli-confirmation-message">${message}</div>
-            <div class="ccli-confirmation-buttons">
-              <button type="button" class="ccli-btn ccli-btn-secondary" id="ccli-confirm-cancel">${cancelText}</button>
-              <button type="button" class="ccli-btn ccli-btn-${confirmType}" id="ccli-confirm-ok">${confirmText}</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
+    this.modal.appendChild(content);
 
-    this.addEventListeners();
     document.body.appendChild(this.modal);
   }
 
@@ -1620,8 +1246,8 @@ class ConfirmationModal {
   }
 
   showModal() {
-    this.modal.classList.remove('ccli-modal-hidden');
-    this.modal.classList.add('ccli-modal-visible');
+    this.modal.classList.remove("ccli-modal-hidden");
+    this.modal.classList.add("ccli-modal-visible");
     // Focus confirm button
     setTimeout(() => {
       const confirmButton = this.modal.querySelector("#ccli-confirm-ok");
@@ -1648,7 +1274,7 @@ class ConfirmationModal {
         document.removeEventListener("keydown", this.enterHandler);
         this.enterHandler = null;
       }
-      
+
       this.modal.remove();
       this.modal = null;
     }
@@ -1664,15 +1290,6 @@ class App {
     this.songFinder = new SongFinder();
     this.progressIndicator = new ProgressIndicator();
     this.confirmationModal = new ConfirmationModal();
-  }
-
-  run() {
-    this.authFlow.init();
-    // Set up callback for automatic import continuation
-    this.authFlow.setAuthCompleteCallback((pendingImport) => {
-      this.continueImportAfterAuth(pendingImport);
-    });
-    GM_registerMenuCommand("⬇️ Import Song to Planning Center", () => this.importSongToPlanningCenter());
   }
 
   async continueImportAfterAuth(pendingImport) {
@@ -1704,18 +1321,16 @@ class App {
       const ccliSongId = this.songFinder.getSongId();
       const slug = location.pathname.split("/").pop();
 
-      // Handle login if needed
-      if (!this.tokenStorage.isTokenValid) {
-        if (!this.tokenStorage.refreshToken) {
+      // Handle login if needed - but make it seamless
+      const isTokenValid = await this.tokenStorage.isTokenValid();
+      if (!isTokenValid) {
+        const refreshToken = await this.tokenStorage.getRefreshToken();
+        if (!refreshToken) {
           // Store pending import before showing login
-          this.tokenStorage.setPendingImport(ccliSongId, slug);
-          
-          alert([
-            "🔐 Authentication Required",
-            "",
-            `You'll be redirected to Planning Center to log in.`,
-            `The import will continue automatically after login.`
-          ].join("\n"));
+          await this.tokenStorage.setPendingImport(ccliSongId, slug);
+
+          // Start login immediately without asking
+          console.info("🔐 Authentication required, starting login flow...");
           this.authFlow.startLogin();
           return;
         }
@@ -1724,30 +1339,25 @@ class App {
           await this.authFlow.refreshToken();
         } catch (err) {
           console.error("Failed to refresh token:", err);
-          
+
           // Store pending import before re-authentication
-          this.tokenStorage.setPendingImport(ccliSongId, slug);
-          
-          alert([
-            "🔐 Login Required",
-            "",
-            `Your session has expired. You'll be redirected to Planning Center to log in again.`,
-            "The import will continue automatically after login."
-          ].join("\n"));
+          await this.tokenStorage.setPendingImport(ccliSongId, slug);
+
+          console.info("🔐 Token refresh failed, starting login flow...");
           this.authFlow.startLogin();
           return;
         }
       }
 
-      // Clear any pending import since we're proceeding directly
-      this.tokenStorage.clearPendingImport();
-      
+      // Clear any pending import since we"re proceeding directly
+      await this.tokenStorage.clearPendingImport();
+
       // Proceed with import
       await this.performImport(ccliSongId, slug);
 
     } catch (error) {
       console.error("Import initiation failed:", error);
-      this.tokenStorage.clearPendingImport();
+      await this.tokenStorage.clearPendingImport();
       alert(`❌ Failed to start import: ${error.message}`);
     }
   }
@@ -1827,7 +1437,7 @@ class App {
         errorDetails = "Please try the import again to re-authenticate.";
       } else if (error.message.includes("403") || error.message.includes("Forbidden")) {
         errorMessage = "Permission denied";
-        errorDetails = "You don't have permission to add songs to Planning Center. Please check with your administrator.";
+        errorDetails = `You don"t have permission to add songs to Planning Center. Please check with your administrator.`;
       }
 
       if (progress) {
@@ -1840,10 +1450,10 @@ class App {
 
   async confirmSongUpdate() {
     console.info("Song already exists in Planning Center.");
-    
+
     const title = "Song Already Exists";
     const message = "This song already exists in Planning Center. Do you want to update the default arrangement with the current ChordPro and leadsheet?";
-    
+
     return await this.confirmationModal.show(
       title,
       message,
@@ -2019,7 +1629,23 @@ class App {
   isCorrectPage() {
     return location.pathname.startsWith("/songs");
   }
+
+  run() {
+    this.authFlow.init();
+    this.authFlow.setAuthCompleteCallback((pendingImport) => {
+      this.continueImportAfterAuth(pendingImport);
+    });
+
+    // Listen for messages from popup
+    browser.runtime.onMessage.addListener((request) => {
+      if (request.action === "import_song") {
+        this.importSongToPlanningCenter();
+      }
+      return Promise.resolve();
+    });
+  }
 }
 
+// Initialize the app
 const app = new App();
 app.run();
