@@ -56,3 +56,50 @@ h1 {
   color: #6b7280;
   line-height: 1.4;
 }
+
+.message-toast {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  padding: 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+  z-index: 1000;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  
+  /* Initial state - hidden above viewport */
+  transform: translateY(-100%);
+  opacity: 0;
+  transition: all 0.3s ease;
+}
+
+.message-toast.show {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.message-toast.hide {
+  transform: translateY(-100%);
+  opacity: 0;
+}
+
+.message-toast.error {
+  background-color: #fee;
+  border: 1px solid #fcc;
+  color: #c33;
+}
+
+.message-toast.warning {
+  background-color: #fff3cd;
+  border: 1px solid #ffeaa7;
+  color: #856404;
+}
+
+.message-toast.info {
+  background-color: #e7f3ff;
+  border: 1px solid #bee5eb;
+  color: #31708f;
+}

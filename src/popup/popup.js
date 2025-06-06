@@ -1,5 +1,5 @@
 // Cross-browser compatibility
-const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
+const browserAPI = typeof browser !== "undefined" ? browser : chrome;
 
 document.addEventListener("DOMContentLoaded", async () => {
   const statusDiv = document.getElementById("status");
@@ -30,6 +30,32 @@ document.addEventListener("DOMContentLoaded", async () => {
       && Date.now() < expiresAt.expires_at;
   }
 
+  // Add a function to show messages in the popup
+  function showMessage(message, type = "info") {
+    const messageDiv = document.createElement("div");
+    messageDiv.className = `message-toast ${type}`;
+    messageDiv.textContent = message;
+
+    // Add to body with fixed positioning
+    document.body.appendChild(messageDiv);
+
+    // Trigger show animation
+    requestAnimationFrame(() => {
+      messageDiv.classList.add("show");
+    });
+
+    // Auto-remove after a few seconds
+    setTimeout(() => {
+      messageDiv.classList.add("hide");
+
+      setTimeout(() => {
+        if (messageDiv.parentNode) {
+          messageDiv.parentNode.removeChild(messageDiv);
+        }
+      }, 300);
+    }, 3000);
+  }
+
   // Import button click
   importBtn.addEventListener("click", async () => {
     try {
@@ -37,7 +63,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       const currentTab = tabs[0];
 
       if (!currentTab.url.includes("songselect.ccli.com/songs/")) {
-        alert("Please navigate to a song page on CCLI SongSelect first.");
+        showMessage("Please navigate to a song page on CCLI SongSelect.", "error");
         return;
       }
 
@@ -47,17 +73,15 @@ document.addEventListener("DOMContentLoaded", async () => {
         window.close();
       } catch (error) {
         if (error.message.includes("Could not establish connection")) {
-          alert("Please reload this song page and try again.\n\n(The extension needs to be reloaded on existing tabs)");
+          showMessage("Please reload this song page and try again.\n\n(The extension needs to be reloaded on existing tabs)", "warning");
         } else {
           console.error("Error starting import:", error);
-          alert("Error starting import. Please try again.");
+          showMessage("Error starting import. Please try again.", "error");
         }
       }
-
-      window.close();
     } catch (error) {
       console.error("Error starting import:", error);
-      alert("Error starting import. Please try again.");
+      showMessage("Error starting import. Please try again.", "error");
     }
   });
 

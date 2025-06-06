@@ -13,6 +13,9 @@ async function build(browser) {
   // Copy source files
   await cp("src", distPath, { recursive: true });
 
+  // Copy icons
+  await cp("icons", join(distPath, "icons"), { recursive: true });
+
   // Copy correct manifest
   await cp(manifestPath, join(distPath, "manifest.json"));
 }

@@ -13,7 +13,7 @@
   "license": "MIT",
   "author": "",
   "type": "module",
-  "main": "index.js",
+  "main": "scripts/build.js",
   "scripts": {
     "build": "node scripts/build.js"
   }
