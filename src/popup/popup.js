@@ -6,8 +6,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Check connection status
   async function updateStatus() {
     try {
-      const accessToken = await browser.storage.local.get(["access_token"]);
-      const expiresAt = await browser.storage.local.get(["expires_at"]);
+      const accessToken = await chrome.storage.local.get(["access_token"]);
+      const expiresAt = await chrome.storage.local.get(["expires_at"]);
 
       if (isConnected(accessToken, expiresAt)) {
         statusDiv.className = "status connected";
@@ -30,7 +30,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Import button click
   importBtn.addEventListener("click", async () => {
     try {
-      const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
       const currentTab = tabs[0];
 
       if (!currentTab.url.includes("songselect.ccli.com/songs/")) {
@@ -39,7 +39,18 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
 
       // Send message to content script to start import
-      await browser.tabs.sendMessage(currentTab.id, { action: "import_song" });
+      try {
+        await chrome.tabs.sendMessage(currentTab.id, { action: "import_song" });
+        window.close();
+      } catch (error) {
+        if (error.message.includes("Could not establish connection")) {
+          alert("Please reload this song page and try again.\n\n(The extension needs to be reloaded on existing tabs)");
+        } else {
+          console.error("Error starting import:", error);
+          alert("Error starting import. Please try again.");
+        }
+      }
+
       window.close();
     } catch (error) {
       console.error("Error starting import:", error);

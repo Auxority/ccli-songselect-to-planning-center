@@ -2,18 +2,18 @@
 class ExtensionStorage {
   static async getValue(key, defaultValue = null) {
     return new Promise((resolve) => {
-      browser.storage.local.get({ [key]: defaultValue }).then((result) => {
+      chrome.storage.local.get({ [key]: defaultValue }).then((result) => {
         resolve(result[key]);
       });
     });
   }
 
   static async setValue(key, value) {
-    return browser.storage.local.set({ [key]: value });
+    return chrome.storage.local.set({ [key]: value });
   }
 
   static async deleteValue(key) {
-    return browser.storage.local.remove(key);
+    return chrome.storage.local.remove(key);
   }
 }
 
@@ -33,23 +33,53 @@ class ExtensionHttpClient {
     return this.performRequest("PATCH", url, headers, data);
   }
 
-  async performRequest(method, url, headers = {}, data = null) {
+  async performRequest(method, url, headers = {}, rawData = null) {
+    const data = await this.getSerializedData(rawData);
+
     // Send request to background script to bypass CORS
     return new Promise((resolve, reject) => {
-      browser.runtime.sendMessage({
+      chrome.runtime.sendMessage({
         action: "http_request",
         method,
         url,
         headers,
         data
       }, (response) => {
-        if (response.error) {
+        if (response && response.error) {
           reject(new Error(response.error));
         } else {
           resolve(response);
         }
       });
     });
+  }
+
+  async getSerializedData(rawData) {
+    if (rawData instanceof FormData) {
+      return await this.serializeFormData(rawData);
+    }
+
+    return rawData;
+  }
+
+  async serializeFormData(formData) {
+    const formDataEntries = {};
+    for (const [key, value] of formData.entries()) {
+      if (value instanceof File || value instanceof Blob) {
+        // Convert File/Blob to ArrayBuffer for serialization
+        const arrayBuffer = await value.arrayBuffer();
+        formDataEntries[key] = {
+          type: "file",
+          name: value.name || "file",
+          data: Array.from(new Uint8Array(arrayBuffer)),
+          contentType: value.type
+        };
+      } else {
+        formDataEntries[key] = { type: "string", data: value };
+      }
+    }
+
+    return { type: "formData", entries: formDataEntries };
   }
 }
 
@@ -1098,7 +1128,7 @@ class TemplateLoader {
     }
 
     try {
-      const url = browser.runtime.getURL(`templates/${templateName}.html`);
+      const url = chrome.runtime.getURL(`src/templates/${templateName}.html`);
       const response = await fetch(url);
       const html = await response.text();
       this.cache.set(templateName, html);
@@ -1637,7 +1667,7 @@ class App {
     });
 
     // Listen for messages from popup
-    browser.runtime.onMessage.addListener((request) => {
+    chrome.runtime.onMessage.addListener((request) => {
       if (request.action === "import_song") {
         this.importSongToPlanningCenter();
       }
