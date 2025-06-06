@@ -28,7 +28,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["src/templates/*", "src/assets/*"],
+      "resources": ["src/templates/*"],
       "matches": ["<all_urls>"]
     }
   ]
