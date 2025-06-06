@@ -1,3 +1,6 @@
+// Cross-browser compatibility
+const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
+
 document.addEventListener("DOMContentLoaded", async () => {
   const statusDiv = document.getElementById("status");
   const statusText = document.getElementById("status-text");
@@ -6,8 +9,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Check connection status
   async function updateStatus() {
     try {
-      const accessToken = await chrome.storage.local.get(["access_token"]);
-      const expiresAt = await chrome.storage.local.get(["expires_at"]);
+      const accessToken = await browserAPI.storage.local.get(["access_token"]);
+      const expiresAt = await browserAPI.storage.local.get(["expires_at"]);
 
       if (isConnected(accessToken, expiresAt)) {
         statusDiv.className = "status connected";
@@ -30,7 +33,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Import button click
   importBtn.addEventListener("click", async () => {
     try {
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const tabs = await browserAPI.tabs.query({ active: true, currentWindow: true });
       const currentTab = tabs[0];
 
       if (!currentTab.url.includes("songselect.ccli.com/songs/")) {
@@ -40,7 +43,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       // Send message to content script to start import
       try {
-        await chrome.tabs.sendMessage(currentTab.id, { action: "import_song" });
+        await browserAPI.tabs.sendMessage(currentTab.id, { action: "import_song" });
         window.close();
       } catch (error) {
         if (error.message.includes("Could not establish connection")) {

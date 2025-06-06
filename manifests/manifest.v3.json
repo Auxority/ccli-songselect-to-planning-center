@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "CCLI SongSelect to Planning Center",
+  "version": "0.1.0",
+  "description": "Import songs from CCLI SongSelect to Planning Center",
+  "permissions": ["storage", "background"],
+  "host_permissions": [
+    "https://songselect.ccli.com/*",
+    "https://services.planningcenteronline.com/*",
+    "https://api.planningcenteronline.com/*",
+    "https://upload.planningcenteronline.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://songselect.ccli.com/*",
+        "https://services.planningcenteronline.com/*"
+      ],
+      "js": ["content/content.js"],
+      "css": ["content/styles.css"]
+    }
+  ],
+  "background": {
+    "service_worker": "background/background.js"
+  },
+  "action": {
+    "default_popup": "popup/popup.html"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["templates/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

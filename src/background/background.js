@@ -1,12 +1,16 @@
 // Background script for handling extension lifecycle and messaging
-chrome.runtime.onInstalled.addListener((details) => {
+
+// Cross-browser compatibility
+const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
+
+browserAPI.runtime.onInstalled.addListener((details) => {
   if (details.reason === "install") {
     console.log("CCLI SongSelect to Planning Center extension installed");
   }
 });
 
 // Handle any background tasks or message passing if needed
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+browserAPI.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "http_request") {
     performHttpRequest(request)
       .then(response => sendResponse(response))
@@ -16,7 +20,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // Handle messages from content script if needed
   return Promise.resolve();
 });
-
 
 async function performHttpRequest({ method, url, headers = {}, data = null }) {
   const options = {

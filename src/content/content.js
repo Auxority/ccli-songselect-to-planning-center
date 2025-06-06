@@ -1,19 +1,22 @@
+// Cross-browser compatibility
+const browserAPI = typeof browser !== "undefined" ? browser : chrome;
+
 // Browser extension storage wrapper
 class ExtensionStorage {
   static async getValue(key, defaultValue = null) {
     return new Promise((resolve) => {
-      chrome.storage.local.get({ [key]: defaultValue }).then((result) => {
+      browserAPI.storage.local.get({ [key]: defaultValue }).then((result) => {
         resolve(result[key]);
       });
     });
   }
 
   static async setValue(key, value) {
-    return chrome.storage.local.set({ [key]: value });
+    return browserAPI.storage.local.set({ [key]: value });
   }
 
   static async deleteValue(key) {
-    return chrome.storage.local.remove(key);
+    return browserAPI.storage.local.remove(key);
   }
 }
 
@@ -38,7 +41,7 @@ class ExtensionHttpClient {
 
     // Send request to background script to bypass CORS
     return new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage({
+      browserAPI.runtime.sendMessage({
         action: "http_request",
         method,
         url,
@@ -55,6 +58,10 @@ class ExtensionHttpClient {
   }
 
   async getSerializedData(rawData) {
+    if (!rawData) {
+      return null;
+    }
+
     if (rawData instanceof FormData) {
       return await this.serializeFormData(rawData);
     }
@@ -63,23 +70,53 @@ class ExtensionHttpClient {
   }
 
   async serializeFormData(formData) {
-    const formDataEntries = {};
-    for (const [key, value] of formData.entries()) {
-      if (value instanceof File || value instanceof Blob) {
-        // Convert File/Blob to ArrayBuffer for serialization
-        const arrayBuffer = await value.arrayBuffer();
-        formDataEntries[key] = {
-          type: "file",
-          name: value.name || "file",
-          data: Array.from(new Uint8Array(arrayBuffer)),
-          contentType: value.type
-        };
-      } else {
-        formDataEntries[key] = { type: "string", data: value };
-      }
+    this._validateFormData(formData);
+    return await this._serializeUsingIterator(formData);
+  }
+
+  _validateFormData(formData) {
+    if (!formData) {
+      throw new Error("FormData is null or undefined");
     }
 
+    if (!(formData instanceof FormData)) {
+      console.error("Object is not a FormData instance:", formData);
+      throw new Error("Object passed is not a FormData instance");
+    }
+
+    if (typeof formData.entries !== "function") {
+      console.error("FormData.entries is not a function. FormData may be corrupted.");
+      throw new Error("FormData.entries method is not available");
+    }
+  }
+
+  async _serializeUsingIterator(formData) {
+    const formDataEntries = {};
+    const iterator = formData.entries();
+    let result = iterator.next();
+
+    while (!result.done) {
+      const [key, value] = result.value;
+      formDataEntries[key] = await this._serializeFormValue(value);
+      result = iterator.next();
+    }
+
+    console.debug("Successfully serialized FormData entries:", Object.keys(formDataEntries));
     return { type: "formData", entries: formDataEntries };
+  }
+
+  async _serializeFormValue(value) {
+    if (value instanceof File || value instanceof Blob) {
+      const arrayBuffer = await value.arrayBuffer();
+      return {
+        type: "file",
+        name: value.name || "file",
+        data: Array.from(new Uint8Array(arrayBuffer)),
+        contentType: value.type
+      };
+    } else {
+      return { type: "string", data: value };
+    }
   }
 }
 
@@ -921,22 +958,38 @@ class PlanningCenterAPI {
    * @returns {Promise<PlanningCenterFile>} the uploaded file object
    */
   async _uploadFile(blob, filename) {
+    // Validate inputs
+    if (!blob || !filename) {
+      throw new Error("Invalid blob or filename provided to _uploadFile");
+    }
+
     const formData = new FormData();
     formData.append("file", blob, filename);
 
-    const response = await this.httpClient.post(PlanningCenterAPI.FILE_UPLOAD_ENDPOINT, null, formData);
-    if (response.status < 200 || response.status >= 300) {
-      throw new Error(`Failed to upload ${filename}.`);
+    // Validate FormData was created properly
+    if (typeof formData.entries !== "function") {
+      console.error("FormData creation failed:", formData);
+      throw new Error("Failed to create valid FormData object");
     }
 
-    console.debug("File upload response:", response);
+    try {
+      const response = await this.httpClient.post(PlanningCenterAPI.FILE_UPLOAD_ENDPOINT, null, formData);
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(`Failed to upload ${filename}.`);
+      }
 
-    const json = JSON.parse(response.responseText);
-    if (!json.data || json.data.length === 0) {
-      throw new Error(`Failed to upload ${filename}.`);
+      console.debug("File upload response:", response);
+
+      const json = JSON.parse(response.responseText);
+      if (!json.data || json.data.length === 0) {
+        throw new Error(`Failed to upload ${filename}.`);
+      }
+
+      return PlanningCenterFile.deserialize(json.data);
+    } catch (error) {
+      console.error("File upload failed:", error);
+      throw new Error(`Failed to upload ${filename}: ${error.message}`);
     }
-
-    return PlanningCenterFile.deserialize(json.data);
   }
 
   /**
@@ -1128,7 +1181,7 @@ class TemplateLoader {
     }
 
     try {
-      const url = chrome.runtime.getURL(`src/templates/${templateName}.html`);
+      const url = browserAPI.runtime.getURL(`templates/${templateName}.html`);
       const response = await fetch(url);
       const html = await response.text();
       this.cache.set(templateName, html);
@@ -1667,7 +1720,7 @@ class App {
     });
 
     // Listen for messages from popup
-    chrome.runtime.onMessage.addListener((request) => {
+    browserAPI.runtime.onMessage.addListener((request) => {
       if (request.action === "import_song") {
         this.importSongToPlanningCenter();
       }
