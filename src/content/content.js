@@ -1062,6 +1062,8 @@ class PlanningCenterAPI {
 }
 
 class ProgressIndicator {
+  static AUTO_CLOSE_DELAY_IN_MS = 3000;
+
   constructor() {
     this.modal = null;
     this.progressBar = null;
@@ -1099,7 +1101,7 @@ class ProgressIndicator {
     }
 
     this.progressBar.classList.add("error");
-    this.statusText.textContent = "❌ " + errorText;
+    this.statusText.textContent = `❌ ${errorText}`;
     this.detailsText.textContent = detailsText;
 
     // Add close button for errors
@@ -1116,38 +1118,25 @@ class ProgressIndicator {
     }
 
     this.progressBar.classList.add("success", "complete");
-    this.statusText.textContent = "✅ " + successText;
+    this.statusText.textContent = `✅ ${successText}`;
     this.detailsText.textContent = detailsText;
 
-    // Auto-close after 3 seconds
-    setTimeout(() => this.close(), 3000);
+    setTimeout(() => this.close(), ProgressIndicator.AUTO_CLOSE_DELAY_IN_MS);
   }
 
-  createModal(title) {
+  async createModal(title) {
     this.remove();
+
+    const html = await TemplateLoader.loadTemplate("progress-modal");
+    const content = TemplateLoader.populateTemplate(html, {
+      title
+    });
 
     this.modal = document.createElement("div");
     this.modal.id = "ccli-progress-modal";
-    this.modal.innerHTML = `
-      <div class="ccli-modal-overlay">
-        <div class="ccli-modal-content ccli-progress-content">
-          <div class="ccli-modal-header">
-            <h2>${title}</h2>
-          </div>
-          <div class="ccli-modal-body">
-            <div class="ccli-progress-container">
-              <div class="ccli-progress-bar-bg">
-                <div class="ccli-progress-bar"></div>
-              </div>
-              <div class="ccli-progress-status"></div>
-              <div class="ccli-progress-details"></div>
-            </div>
-          </div>
-          <div class="ccli-modal-footer"></div>
-        </div>
-      </div>
-    `;
+    this.modal.appendChild(content);
 
+    // Store references to progress elements
     this.progressBar = this.modal.querySelector(".ccli-progress-bar");
     this.statusText = this.modal.querySelector(".ccli-progress-status");
     this.detailsText = this.modal.querySelector(".ccli-progress-details");
@@ -1202,23 +1191,6 @@ class TemplateLoader {
       const element = container.querySelector(`[data-template="${key}"]`);
       if (element) {
         if (key === "form" && Array.isArray(value)) {
-          // Special handling for form fields
-          element.innerHTML = value.map(field => `
-            <div class="ccli-form-group">
-              <label for="${field.id}">${field.label}</label>
-              <input 
-                type="${field.type || "text"}" 
-                id="${field.id}" 
-                name="${field.id}"
-                placeholder="${field.placeholder || ""}"
-                value="${field.value || ""}"
-                required
-                autocomplete="off"
-                autocapitalize="none"
-                spellcheck="false"
-              />
-            </div>
-          `).join("");
         } else {
           element.textContent = value;
         }
@@ -1226,6 +1198,35 @@ class TemplateLoader {
     });
 
     return container;
+  }
+
+  static clearAndPopulateFormFields(element, fields) {
+    // Clear existing content
+    element.replaceChildren();
+
+    fields.forEach(field => {
+      const formGroup = document.createElement("div");
+      formGroup.className = "ccli-form-group";
+
+      const label = document.createElement("label");
+      label.setAttribute("for", field.id);
+      label.textContent = field.label;
+
+      const input = document.createElement("input");
+      input.type = field.type || "text";
+      input.id = field.id;
+      input.name = field.id;
+      input.placeholder = field.placeholder || "";
+      input.value = field.value || "";
+      input.required = true;
+      input.autocomplete = "off";
+      input.autocapitalize = "none";
+      input.spellcheck = false;
+
+      formGroup.appendChild(label);
+      formGroup.appendChild(input);
+      element.appendChild(formGroup);
+    });
   }
 }
 
