@@ -7,17 +7,17 @@ import archiver from "archiver";
 const execAsync = promisify(exec);
 const BROWSERS = ["chrome", "firefox"];
 
-async function build(browser) {
-  const distPath = `dist/${browser}`;
-  console.log(`🔨 Building ${browser} extension...`);
+async function build(targetBrowser) {
+  const distPath = `dist/${targetBrowser}`;
+  console.log(`🔨 Building ${targetBrowser} extension...`);
 
   // Build with webpack using browser-specific config
   console.log("📦 Compiling and bundling...");
-  await execAsync(`npx webpack --mode=production --env browser=${browser}`);
+  await execAsync(`npx webpack --mode=production --env browser=${targetBrowser}`);
   
   // Create ZIP file
-  await createZip(distPath, `dist/${browser}-extension.zip`);
-  console.log(`✓ Built ${browser} extension and created ZIP`);
+  await createZip(distPath, `dist/${targetBrowser}-extension.zip`);
+  console.log(`✓ Built ${targetBrowser} extension and created ZIP`);
 }
 
 async function createZip(sourceDir, outputPath) {

@@ -7,7 +7,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const importBtn = document.getElementById("import-btn");
 
   if (!statusDiv || !statusText || !importBtn) {
-    console.error("Required elements not found in popup HTML");
+    console.error(`Required elements not found in popup HTML: ${statusDiv}, ${statusText}, ${importBtn}`);
     return;
   }
 

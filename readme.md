@@ -2,7 +2,7 @@
 
 *Note that this userscript **requires** an active PlanningCenter and CCLI SongSelect subscription.*
 
-## Usage
+## Usage (Old)
 
 *Note that this might not work in Google Chrome due to Manifest V3*
 
@@ -22,3 +22,9 @@ This project aims to automate the 24-step process through a userscript.
 1. Check if a song exists within the archived songs in Planning Center (to prevent issues when adding the song)
 2. Extract the tempo/bpm from the chords page or lead sheet page (through the CCLI API).
 3. Support importing songs without ChordPro
+
+## Development guide
+
+1. Run `npm install` to install the required dependencies.
+2. Run `node .` to bundle everything together.
+3. Find the (ZIP) files you need for Firefox or Chrome in `./dist/`

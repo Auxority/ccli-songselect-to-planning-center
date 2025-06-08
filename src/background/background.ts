@@ -55,6 +55,13 @@ const listener: Runtime.OnMessageListenerCallback = (
 
 browser.runtime.onMessage.addListener(listener);
 
+/**
+ * Used to perform HTTP requests from the background script.
+ * This function handles different types of data, including JSON and FormData.
+ * It serializes FormData into a format that can be sent through the messaging system.
+ * This bypasses CORS restrictions by using the background script to make the request.
+ * Which is required for the Planning Center API.
+ */
 async function performHttpRequest(request: HttpRequest): Promise<HttpResponse> {
   const headers: Record<string, string> = { ...request.headers };
 

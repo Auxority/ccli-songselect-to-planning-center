@@ -133,8 +133,6 @@ class ExtensionHttpClient {
 class IntegerParser {
   /**
    * Parses a valid finite integer from a string
-   * @param {string} value a string representing an integer
-   * @returns the string converted to an integer
    */
   parse(value: string) {
     const numberValue = parseFloat(value);
@@ -232,8 +230,6 @@ class SongSelectAPI {
 
   /**
    * Fetches the contents of the ChordPro file from SongSelect
-   * @param {CCLISongDetails} songDetails
-   * @returns {Promise<ChordProResponse>} the ChordPro file content
    */
   async fetchChordProText(
     songDetails: CCLISongDetails
@@ -927,9 +923,6 @@ class CCLISongDetails {
 
 /**
  * Represents the attributes of a file in Planning Center
- * @param {string} name - The name of the file
- * @param {string} contentType - The content type of the file
- * @param {number} fileSize - The size of the file in bytes
  */
 class FileAttributes {
   name: string;
@@ -1113,9 +1106,6 @@ class PlanningCenterAPI {
 
   /**
    * Uploads a file to Planning Center"s upload service
-   * @param {Blob} blob the file blob to upload
-   * @param {string} filename the filename to use
-   * @returns {Promise<PlanningCenterFile>} the uploaded file object
    */
   async _uploadFile(blob: Blob, filename: string): Promise<PlanningCenterFile> {
     // Validate inputs
