@@ -1,63 +1,71 @@
-// Cross-browser compatibility
-const browserAPI = typeof browser !== "undefined" ? browser : chrome;
+import browser from "webextension-polyfill";
 
 // Browser extension storage wrapper
 class ExtensionStorage {
-  static async getValue(key, defaultValue = null) {
+  static async getValue(key: string, defaultValue: any = null): Promise<any> {
     return new Promise((resolve) => {
-      browserAPI.storage.local.get({ [key]: defaultValue }).then((result) => {
+      browser.storage.local.get({ [key]: defaultValue }).then((result) => {
         resolve(result[key]);
       });
     });
   }
 
-  static async setValue(key, value) {
-    return browserAPI.storage.local.set({ [key]: value });
+  static async setValue(key: string, value: any): Promise<void> {
+    return browser.storage.local.set({ [key]: value });
   }
 
-  static async deleteValue(key) {
-    return browserAPI.storage.local.remove(key);
+  static async deleteValue(key: string): Promise<void> {
+    return browser.storage.local.remove(key);
   }
 }
 
+type FormDataEntries = Record<string, any>;
+
 // HTTP Client for extension
 class ExtensionHttpClient {
-  constructor() { }
+  constructor() {}
 
-  async get(url, headers = {}) {
+  async get(url: string, headers = {}): Promise<any> {
     return this.performRequest("GET", url, headers);
   }
 
-  async post(url, headers = {}, data = null) {
+  async post(url: string, headers = {}, data: any = null): Promise<any> {
     return this.performRequest("POST", url, headers, data);
   }
 
-  async patch(url, headers = {}, data = null) {
+  async patch(url: string, headers = {}, data: any = null): Promise<any> {
     return this.performRequest("PATCH", url, headers, data);
   }
 
-  async performRequest(method, url, headers = {}, rawData = null) {
+  async performRequest(
+    method: string,
+    url: string,
+    headers = {},
+    rawData = null
+  ): Promise<any> {
     const data = await this.getSerializedData(rawData);
 
     // Send request to background script to bypass CORS
-    return new Promise((resolve, reject) => {
-      browserAPI.runtime.sendMessage({
+    try {
+      const response: any = await browser.runtime.sendMessage({
         action: "http_request",
         method,
         url,
         headers,
-        data
-      }, (response) => {
-        if (response && response.error) {
-          reject(new Error(response.error));
-        } else {
-          resolve(response);
-        }
+        data,
       });
-    });
+
+      if (response && response.error) {
+        throw new Error(response.error);
+      }
+
+      return response;
+    } catch (error) {
+      throw error;
+    }
   }
 
-  async getSerializedData(rawData) {
+  async getSerializedData(rawData?: FormData | string | null): Promise<any> {
     if (!rawData) {
       return null;
     }
@@ -69,12 +77,12 @@ class ExtensionHttpClient {
     return rawData;
   }
 
-  async serializeFormData(formData) {
+  async serializeFormData(formData: FormData): Promise<any> {
     this._validateFormData(formData);
     return await this._serializeUsingIterator(formData);
   }
 
-  _validateFormData(formData) {
+  _validateFormData(formData: FormData) {
     if (!formData) {
       throw new Error("FormData is null or undefined");
     }
@@ -83,15 +91,11 @@ class ExtensionHttpClient {
       console.error("Object is not a FormData instance:", formData);
       throw new Error("Object passed is not a FormData instance");
     }
-
-    if (typeof formData.entries !== "function") {
-      console.error("FormData.entries is not a function. FormData may be corrupted.");
-      throw new Error("FormData.entries method is not available");
-    }
   }
 
-  async _serializeUsingIterator(formData) {
-    const formDataEntries = {};
+  async _serializeUsingIterator(formData: FormData) {
+    const formDataEntries: FormDataEntries = {};
+
     const iterator = formData.entries();
     let result = iterator.next();
 
@@ -101,18 +105,23 @@ class ExtensionHttpClient {
       result = iterator.next();
     }
 
-    console.debug("Successfully serialized FormData entries:", Object.keys(formDataEntries));
+    console.debug(
+      "Successfully serialized FormData entries:",
+      Object.keys(formDataEntries)
+    );
     return { type: "formData", entries: formDataEntries };
   }
 
-  async _serializeFormValue(value) {
+  async _serializeFormValue(value: unknown) {
     if (value instanceof File || value instanceof Blob) {
       const arrayBuffer = await value.arrayBuffer();
+      const fileName = value instanceof File ? value.name : "file";
+
       return {
         type: "file",
-        name: value.name || "file",
+        name: fileName,
         data: Array.from(new Uint8Array(arrayBuffer)),
-        contentType: value.type
+        contentType: value.type,
       };
     } else {
       return { type: "string", data: value };
@@ -127,11 +136,11 @@ class IntegerParser {
    * @param {string} value a string representing an integer
    * @returns the string converted to an integer
    */
-  parse(value) {
+  parse(value: string) {
     const numberValue = parseFloat(value);
 
-    const isValid = !isNaN(numberValue) && isFinite(value);
-    if (!isValid || parseInt(numberValue) !== numberValue) {
+    const isValid = !isNaN(numberValue) && isFinite(numberValue);
+    if (!isValid || parseInt(value) !== numberValue) {
       throw new TypeError(`Given value ${value} is not a valid finite integer`);
     }
 
@@ -142,6 +151,7 @@ class IntegerParser {
 class SongFinder {
   static EXPECTED_PART_COUNT = 4;
   static PATHNAME_SEPARATOR = "/";
+  integerParser: IntegerParser;
 
   constructor() {
     this.integerParser = new IntegerParser();
@@ -155,7 +165,9 @@ class SongFinder {
   getRawSongId() {
     const parts = location.pathname.split(SongFinder.PATHNAME_SEPARATOR);
     if (parts.length !== SongFinder.EXPECTED_PART_COUNT) {
-      throw new Error(`Actual pathname part count ${parts.length} does not match expected part count of ${SongFinder.EXPECTED_PART_COUNT}`);
+      throw new Error(
+        `Actual pathname part count ${parts.length} does not match expected part count of ${SongFinder.EXPECTED_PART_COUNT}`
+      );
     }
 
     return parts[2];
@@ -165,24 +177,32 @@ class SongFinder {
 class ChordProResponse {
   static SECTION_DELIMITER_PATTERN = /\r?\n\r?\n/;
   static SECTION_DELIMITER = "\n\n";
+  rawText: string;
 
-  constructor(rawText) {
+  constructor(rawText: string) {
     this.rawText = rawText;
   }
 
-  toPlanningCenter() {
+  toPlanningCenter(): string {
     // Split the text into sections based on double newlines
-    const sections = this.rawText.split(ChordProResponse.SECTION_DELIMITER_PATTERN);
+    const sections = this.rawText.split(
+      ChordProResponse.SECTION_DELIMITER_PATTERN
+    );
 
     // Remove copyright from the sections (PlanningCenter includes these)
     const modifiedSections = sections.slice(1, -1);
     const songText = modifiedSections.join(ChordProResponse.SECTION_DELIMITER);
 
     // Converts section headers to PlanningCenter"s format
-    const formattedComments = songText.replace(/\{comment: (.*?)\}/g, "<b>$1</b>\n");
+    const formattedComments = songText.replace(
+      /\{comment: (.*?)\}/g,
+      "<b>$1</b>\n"
+    );
 
     // Ensure spacing between adjacent chord brackets
-    const consistentSpacing = formattedComments.replaceAll("][", "] [").replaceAll("](", "] (");
+    const consistentSpacing = formattedComments
+      .replaceAll("][", "] [")
+      .replaceAll("](", "] (");
 
     // Remove any redundant whitespace from the beginning or end of the chords
     return consistentSpacing.trim();
@@ -194,34 +214,40 @@ class SongSelectAPI {
   static CHORD_NOTATION = "Standard";
   static CHORD_COLUMNS = 1;
 
-  constructor() {
-  }
+  constructor() {}
 
   /**
    * Fetches and parses the song details from CCLI SongSelect
-   * @param {number} songId the CCLI ID of the song 
-   * @param {string} slug end of the url on the song page 
-   * @returns {Promise<SongDetails>} the song details
    */
-  async fetchSongDetails(songId, slug) {
+  async fetchSongDetails(
+    pendingImport: PendingCcliImport
+  ): Promise<CCLISongDetails> {
+    const songId = pendingImport.songId;
+    const slug = pendingImport.slug;
     const url = `${SongSelectAPI.BASE_URL}/GetSongDetails?songNumber=${songId}&slug=${slug}`;
     const res = await fetch(url);
     const json = await res.json();
-    return SongDetails.deserialize(json.payload);
+    return CCLISongDetails.deserialize(json.payload);
   }
 
   /**
    * Fetches the contents of the ChordPro file from SongSelect
-   * @param {SongDetails} songDetails 
+   * @param {CCLISongDetails} songDetails
    * @returns {Promise<ChordProResponse>} the ChordPro file content
    */
-  async fetchChordProText(songDetails) {
+  async fetchChordProText(
+    songDetails: CCLISongDetails
+  ): Promise<ChordProResponse> {
     if (!songDetails.products.chordPro.exists) {
-      throw new Error("This song does not have a ChordPro file available on CCLI.");
+      throw new Error(
+        "This song does not have a ChordPro file available on CCLI."
+      );
     }
 
     const parameters = this.createChordProParameters(songDetails);
-    const url = `${SongSelectAPI.BASE_URL}/GetSongChordPro?${parameters.toString()}`;
+    const url = `${
+      SongSelectAPI.BASE_URL
+    }/GetSongChordPro?${parameters.toString()}`;
     const res = await fetch(url);
     const data = await res.json();
 
@@ -232,7 +258,9 @@ class SongSelectAPI {
 
     const rawText = payload.trimStart();
     if (!rawText || rawText.trim() === "") {
-      throw new Error("The ChordPro file does not seem to be available on CCLI.");
+      throw new Error(
+        "The ChordPro file does not seem to be available on CCLI."
+      );
     }
 
     return new ChordProResponse(rawText);
@@ -240,30 +268,28 @@ class SongSelectAPI {
 
   /**
    * Creates URL Search Parameters from song details
-   * @param {SongDetails} songDetails 
-   * @returns {URLSearchParams}
    */
-  createChordProParameters(songDetails) {
+  createChordProParameters(songDetails: CCLISongDetails): URLSearchParams {
     return new URLSearchParams({
-      songNumber: songDetails.ccliId,
+      songNumber: songDetails.id.toString(),
       key: songDetails.key,
       style: SongSelectAPI.CHORD_NOTATION,
-      columns: SongSelectAPI.CHORD_COLUMNS,
+      columns: SongSelectAPI.CHORD_COLUMNS.toString(),
     });
   }
 
   /**
    * Downloads a leadsheet from SongSelect
-   * @param {SongDetails} songDetails 
-   * @returns {Promise<Blob>} the leadsheet PDF blob
    */
-  async downloadLeadsheet(songDetails) {
+  async downloadLeadsheet(songDetails: CCLISongDetails): Promise<Blob> {
     if (!songDetails.products.lead.exists) {
       throw new Error("This song does not have a leadsheet available on CCLI.");
     }
 
     const parameters = this.createLeadsheetParameters(songDetails);
-    const url = `${SongSelectAPI.BASE_URL}/GetSongLeadPdf?${parameters.toString()}`;
+    const url = `${
+      SongSelectAPI.BASE_URL
+    }/GetSongLeadPdf?${parameters.toString()}`;
 
     try {
       const response = await fetch(url);
@@ -273,28 +299,28 @@ class SongSelectAPI {
 
       const pdfBlob = await response.blob();
       if (pdfBlob.size === 0) {
-        throw new Error("Attempted to donload a leadsheet without it being available on CCLI.");
+        throw new Error(
+          "Attempted to donload a leadsheet without it being available on CCLI."
+        );
       }
 
       return pdfBlob;
     } catch (error) {
-      throw new Error("Error downloading leadsheet:", error);
+      throw new Error(`Error downloading leadsheet: ${error}`);
     }
   }
 
   /**
    * Create leadsheet parameters for the API request
-   * @param {SongDetails} songDetails 
-   * @returns the URLSearchParams for the leadsheet request
    */
-  createLeadsheetParameters(songDetails) {
+  createLeadsheetParameters(songDetails: CCLISongDetails): URLSearchParams {
     return new URLSearchParams({
-      songNumber: songDetails.ccliId,
+      songNumber: songDetails.id.toString(),
       key: songDetails.key,
       style: SongSelectAPI.CHORD_NOTATION,
-      columns: SongSelectAPI.CHORD_COLUMNS,
-      octave: 0,
-      noteSize: 0,
+      columns: SongSelectAPI.CHORD_COLUMNS.toString(),
+      octave: "0",
+      noteSize: "0",
       orientation: "Portrait",
       paperSize: "A4",
       activityType: "downloaded",
@@ -304,51 +330,59 @@ class SongSelectAPI {
 
   /**
    * Downloads a vocal sheet from SongSelect
-   * @param {SongDetails} songDetails 
-   * @returns {Promise<Blob>} the vocal sheet PDF blob
    */
-  async downloadVocalSheet(songDetails) {
+  async downloadVocalSheet(songDetails: CCLISongDetails): Promise<Blob> {
     if (!songDetails.products.vocal.exists) {
       throw new Error("This song does not have a leadsheet available on CCLI.");
     }
 
     const parameters = this.createVocalSheetParameters(songDetails);
-    const url = `${SongSelectAPI.BASE_URL}/GetSongVocalPdf?${parameters.toString()}`;
+    const url = `${
+      SongSelectAPI.BASE_URL
+    }/GetSongVocalPdf?${parameters.toString()}`;
 
     try {
       const response = await fetch(url);
       if (!response.ok) {
-        throw new Error(`Failed to download vocal sheet: ${response.statusText}`);
+        throw new Error(
+          `Failed to download vocal sheet: ${response.statusText}`
+        );
       }
 
       const pdfBlob = await response.blob();
       if (pdfBlob.size === 0) {
-        throw new Error("Attempted to download a vocal sheet without it being available on CCLI.");
+        throw new Error(
+          "Attempted to download a vocal sheet without it being available on CCLI."
+        );
       }
 
       return pdfBlob;
     } catch (error) {
-      throw new Error("Error downloading vocal sheet:", error);
+      throw new Error(`Error downloading vocal sheet: ${error}`);
     }
   }
 
   /**
    * Create vocal sheet parameters for the API request
-   * @param {SongDetails} songDetails 
-   * @returns the URLSearchParams for the vocal sheet request
    */
-  createVocalSheetParameters(songDetails) {
+  createVocalSheetParameters(songDetails: CCLISongDetails): URLSearchParams {
     return new URLSearchParams({
-      songNumber: songDetails.ccliId,
+      songNumber: songDetails.id.toString(),
       transposeKey: songDetails.key,
-      octave: 0,
-      noteSize: 0,
+      octave: "0",
+      noteSize: "0",
       orientation: "Portrait",
       paperSize: "A4",
       activityType: "downloaded",
       renderer: "legacy",
     });
   }
+}
+
+interface TokenData {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
 }
 
 class TokenStorage {
@@ -359,35 +393,72 @@ class TokenStorage {
   static CODE_VERIFIER_KEY = "code_verifier";
   static TEN_MINUTES_IN_MS = 10 * 60 * 1000;
 
-  async saveToken(tokenData) {
-    await ExtensionStorage.setValue(TokenStorage.ACCESS_TOKEN_KEY, tokenData.access_token);
-    await ExtensionStorage.setValue(TokenStorage.REFRESH_TOKEN_KEY, tokenData.refresh_token);
-    await ExtensionStorage.setValue(TokenStorage.EXPIRES_AT_KEY, Date.now() + tokenData.expires_in * 1000);
+  async saveToken(tokenData: TokenData): Promise<void> {
+    await ExtensionStorage.setValue(
+      TokenStorage.ACCESS_TOKEN_KEY,
+      tokenData.access_token
+    );
+    await ExtensionStorage.setValue(
+      TokenStorage.REFRESH_TOKEN_KEY,
+      tokenData.refresh_token
+    );
+    await ExtensionStorage.setValue(
+      TokenStorage.EXPIRES_AT_KEY,
+      Date.now() + tokenData.expires_in * 1000
+    );
   }
 
-  async saveCodeVerifier(codeVerifier) {
-    await ExtensionStorage.setValue(TokenStorage.CODE_VERIFIER_KEY, codeVerifier);
+  async saveCodeVerifier(codeVerifier: string) {
+    await ExtensionStorage.setValue(
+      TokenStorage.CODE_VERIFIER_KEY,
+      codeVerifier
+    );
   }
 
-  async getCodeVerifier() {
-    return await ExtensionStorage.getValue(TokenStorage.CODE_VERIFIER_KEY, null);
+  async getCodeVerifier(): Promise<string> {
+    const codeVerifier = await ExtensionStorage.getValue(
+      TokenStorage.CODE_VERIFIER_KEY,
+      null
+    );
+
+    if (!codeVerifier || typeof codeVerifier !== "string") {
+      throw new Error(
+        "Code verifier not found. Please restart the authentication process."
+      );
+    }
+
+    return codeVerifier;
   }
 
   async clearCodeVerifier() {
     await ExtensionStorage.deleteValue(TokenStorage.CODE_VERIFIER_KEY);
   }
 
-  async setPendingImport(songId, slug) {
-    const data = JSON.stringify({ songId, slug, timestamp: Date.now() });
-    await ExtensionStorage.setValue(TokenStorage.PENDING_IMPORT_KEY, data);
+  async setPendingImport(pendingImport: PendingCcliImport) {
+    const data = {
+      songId: pendingImport.songId,
+      slug: pendingImport.slug,
+      timestamp: Date.now(),
+    };
+    const serializedData = JSON.stringify(data);
+    await ExtensionStorage.setValue(
+      TokenStorage.PENDING_IMPORT_KEY,
+      serializedData
+    );
   }
 
   async getPendingImport() {
-    const pendingImport = await ExtensionStorage.getValue(TokenStorage.PENDING_IMPORT_KEY, null);
-    if (!pendingImport) return null;
+    const rawPendingImport = await ExtensionStorage.getValue(
+      TokenStorage.PENDING_IMPORT_KEY,
+      null
+    );
+
+    if (!rawPendingImport) {
+      return null;
+    }
 
     try {
-      const data = JSON.parse(pendingImport);
+      const data = JSON.parse(rawPendingImport);
       if (Date.now() - data.timestamp > TokenStorage.TEN_MINUTES_IN_MS) {
         await this.clearPendingImport();
         return null;
@@ -408,7 +479,10 @@ class TokenStorage {
   }
 
   async getRefreshToken() {
-    return await ExtensionStorage.getValue(TokenStorage.REFRESH_TOKEN_KEY, null);
+    return await ExtensionStorage.getValue(
+      TokenStorage.REFRESH_TOKEN_KEY,
+      null
+    );
   }
 
   async isTokenValid() {
@@ -420,45 +494,55 @@ class TokenStorage {
 
 class OAuthClient {
   static CONFIG = {
-    CLIENT_ID: "0ee14294650bb97000608fc17e63ce8616c3728e97d3219f45156f493d410ccc",
+    CLIENT_ID:
+      "0ee14294650bb97000608fc17e63ce8616c3728e97d3219f45156f493d410ccc",
     REDIRECT_URI: "https://services.planningcenteronline.com/dashboard/0",
     AUTH_URL: "https://api.planningcenteronline.com/oauth/authorize",
     TOKEN_URL: "https://api.planningcenteronline.com/oauth/token",
     SCOPE: "services",
   };
 
+  tokenStorage: TokenStorage;
+  httpClient: ExtensionHttpClient;
+
   constructor() {
     this.tokenStorage = new TokenStorage();
     this.httpClient = new ExtensionHttpClient();
   }
 
-  async exchangeCodeForToken(code) {
+  async exchangeCodeForToken(code: string): Promise<void> {
     const codeVerifier = await this.tokenStorage.getCodeVerifier();
-    if (!codeVerifier) {
-      throw new Error("Code verifier not found. Please restart the authentication process.");
-    }
-
     const searchParams = this.generateTokenSearchParams(code, codeVerifier);
 
     console.info("🔄 Attempting to exchange code for token...");
 
-    const response = await this.httpClient.post(OAuthClient.CONFIG.TOKEN_URL, this.headers, searchParams.toString());
+    const response = await this.httpClient.post(
+      OAuthClient.CONFIG.TOKEN_URL,
+      this.headers,
+      searchParams.toString()
+    );
     const result = JSON.parse(response.responseText);
     await this.tokenStorage.saveToken(result);
     await this.tokenStorage.clearCodeVerifier();
 
     if (window.opener) {
-      window.opener.postMessage({
-        type: "oauth_complete",
-        access_token: result.access_token,
-        refresh_token: result.refresh_token,
-        expires_in: result.expires_in
-      }, "*");
+      window.opener.postMessage(
+        {
+          type: "oauth_complete",
+          access_token: result.access_token,
+          refresh_token: result.refresh_token,
+          expires_in: result.expires_in,
+        },
+        "*"
+      );
       window.close();
     }
   }
 
-  generateTokenSearchParams(code, codeVerifier) {
+  generateTokenSearchParams(
+    code: string,
+    codeVerifier: string
+  ): URLSearchParams {
     return new URLSearchParams({
       grant_type: "authorization_code",
       code: code,
@@ -474,16 +558,18 @@ class OAuthClient {
     const refreshToken = await this.tokenStorage.getRefreshToken();
     const searchParams = this.generateRefreshTokenSearchParams(refreshToken);
 
-    const response = await this.httpClient.post(OAuthClient.CONFIG.TOKEN_URL, this.headers, searchParams.toString()).catch(err => {
-      console.error("🔁 Token refresh failed:", err);
-      alert("Refresh token is invalid or expired. Please log in again.");
-      throw new Error("Refresh request failed:", err);
-    });
+    const response = await this.httpClient
+      .post(OAuthClient.CONFIG.TOKEN_URL, this.headers, searchParams.toString())
+      .catch((err) => {
+        console.error("🔁 Token refresh failed:", err);
+        alert("Refresh token is invalid or expired. Please log in again.");
+        throw new Error("Refresh request failed:", err);
+      });
 
     this.onSuccessfulRefreshResponse(response);
   }
 
-  generateRefreshTokenSearchParams(refreshToken) {
+  generateRefreshTokenSearchParams(refreshToken: string): URLSearchParams {
     return new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: refreshToken,
@@ -491,7 +577,7 @@ class OAuthClient {
     });
   }
 
-  async onSuccessfulRefreshResponse(response) {
+  async onSuccessfulRefreshResponse(response: any) {
     const result = JSON.parse(response.responseText);
     await this.tokenStorage.saveToken(result);
     console.info("✅ Token refreshed successfully.");
@@ -532,7 +618,7 @@ class OAuthClient {
       .replace(/=/g, "");
   }
 
-  async generateCodeChallenge(codeVerifier) {
+  async generateCodeChallenge(codeVerifier: string): Promise<string> {
     const encoder = new TextEncoder();
     const data = encoder.encode(codeVerifier);
     const digest = await crypto.subtle.digest("SHA-256", data);
@@ -543,14 +629,20 @@ class OAuthClient {
   }
 }
 
+type PendingImportCallback = (pendingImport: PendingCcliImport) => void;
+
 class OAuthFlow {
   static POPUP_WIDTH = 500;
   static POPUP_HEIGHT = 700;
 
+  client: OAuthClient;
+  tokenStorage: TokenStorage;
+  onAuthCompleteCallback: PendingImportCallback;
+
   constructor() {
     this.client = new OAuthClient();
     this.tokenStorage = new TokenStorage();
-    this.onAuthCompleteCallback = null;
+    this.onAuthCompleteCallback = () => {};
   }
 
   init() {
@@ -583,7 +675,7 @@ class OAuthFlow {
         "1. Allow popups for songselect.ccli.com",
         "2. Try the import again",
         "",
-        "The popup is needed to securely connect to Planning Center."
+        "The popup is needed to securely connect to Planning Center.",
       ].join("\n");
       alert(message);
       console.error("Popup blocked! Please allow popups for this site.");
@@ -610,11 +702,11 @@ class OAuthFlow {
     window.addEventListener("message", (event) => this._onMessage(event));
   }
 
-  setAuthCompleteCallback(callback) {
+  setAuthCompleteCallback(callback: PendingImportCallback) {
     this.onAuthCompleteCallback = callback;
   }
 
-  async _onMessage(event) {
+  async _onMessage(event: MessageEvent) {
     if (event.data?.type !== "oauth_complete" || !event.data.access_token) {
       console.debug("Invalid message received:", event.data);
       return;
@@ -631,7 +723,9 @@ class OAuthFlow {
       // Use setTimeout to ensure the auth flow completes first
       setTimeout(() => this.onAuthCompleteCallback(pendingImport), 100);
     } else {
-      alert("✅ Successfully connected to Planning Center! You can now import songs.");
+      alert(
+        "✅ Successfully connected to Planning Center! You can now import songs."
+      );
     }
   }
 
@@ -641,11 +735,16 @@ class OAuthFlow {
 }
 
 class SongProduct {
+  exists: boolean;
+  authorized: boolean;
+  noAuthReason: string;
+  exceededMaxUniqueSongCount: boolean;
+
   constructor(
     exists = false,
     authorized = false,
     noAuthReason = "",
-    exceededMaxUniqueSongCount = false,
+    exceededMaxUniqueSongCount = false
   ) {
     this.exists = exists;
     this.authorized = authorized;
@@ -653,17 +752,25 @@ class SongProduct {
     this.exceededMaxUniqueSongCount = exceededMaxUniqueSongCount;
   }
 
-  static deserialize(json) {
+  static deserialize(json: any): SongProduct {
     return new SongProduct(
       json.exists,
       json.authorized,
       json.noAuthReason,
-      json.exceededMaxUniqueSongCount,
+      json.exceededMaxUniqueSongCount
     );
   }
 }
 
 class SongProducts {
+  general: SongProduct;
+  lyrics: SongProduct;
+  chords: SongProduct;
+  chordPro: SongProduct;
+  lead: SongProduct;
+  vocal: SongProduct;
+  multitracks: SongProduct;
+
   constructor(
     general = new SongProduct(),
     lyrics = new SongProduct(),
@@ -671,7 +778,7 @@ class SongProducts {
     chordPro = new SongProduct(),
     lead = new SongProduct(),
     vocal = new SongProduct(),
-    multitracks = new SongProduct(),
+    multitracks = new SongProduct()
   ) {
     this.general = general;
     this.lyrics = lyrics;
@@ -682,7 +789,7 @@ class SongProducts {
     this.multitracks = multitracks;
   }
 
-  static deserialize(json) {
+  static deserialize(json: any) {
     return new SongProducts(
       SongProduct.deserialize(json.general),
       SongProduct.deserialize(json.lyrics),
@@ -690,106 +797,131 @@ class SongProducts {
       SongProduct.deserialize(json.chordPro),
       SongProduct.deserialize(json.lead),
       SongProduct.deserialize(json.vocal),
-      SongProduct.deserialize(json.multitracks),
+      SongProduct.deserialize(json.multitracks)
     );
   }
 }
 
-class SongDetails {
+type ContentLabel = {
+  label: string;
+};
+
+type Admins = string | Array<string | ContentLabel>;
+
+type Authors = string | Array<string | ContentLabel>;
+
+class CCLISongDetails {
+  id: number;
+  key: string;
+  bpm: number;
+  copyright: string;
+  title: string;
+  themes: string;
+  products: SongProducts;
+  admins: string[];
+  authors: string[];
+
   constructor(
-    ccliId = 0,
-    admin = "",
+    id = 0,
     key = "C",
-    bpm = null,
+    bpm = 0,
     copyright = "",
     title = "",
-    author = "",
     themes = "",
-    products = new SongProducts()
+    products = new SongProducts(),
+    admins: string[] = [],
+    authors: string[] = []
   ) {
-    this.ccliId = ccliId;
-    this.admin = admin;
+    this.id = id;
     this.key = key;
     this.bpm = bpm;
     this.copyright = copyright;
     this.title = title;
-    this.author = author;
     this.themes = themes;
     this.products = products;
+    this.admins = admins;
+    this.authors = authors;
   }
 
   /**
    * Deserializes the JSON into a SongDetails object
-   * @param {Object} json from the SongSelect API response
-   * @returns {SongDetails}
    */
-  static deserialize(json) {
+  static deserialize(json: any): CCLISongDetails {
     console.debug("Deserializing song details:", json);
 
-    return new SongDetails(
+    return new CCLISongDetails(
       json.ccliSongNumber,
-      SongDetails._extractAdmin(json.administrators),
-      SongDetails._extractDefaultKey(json.defaultKey),
-      SongDetails._extractBpm(json.bpm),
+      CCLISongDetails._extractDefaultKey(json.defaultKey),
+      CCLISongDetails._extractBpm(json.bpm),
       json.copyrights.trim(),
       json.title.trim(),
-      SongDetails._extractAuthor(json.authors),
-      SongDetails._extractThemes(json.themes),
+      CCLISongDetails._extractThemes(json.themes),
       SongProducts.deserialize(json.products),
+      CCLISongDetails._extractAdmins(json.administrators),
+      CCLISongDetails._extractAuthors(json.authors)
     );
   }
 
-  serializeForPlanningCenter(songId) {
+  serializeForPlanningCenter(): object {
     return {
       data: {
         type: "Song",
         attributes: {
           title: this.title,
-          admin: this.songDetails,
-          author: this.author,
+          admin: this.admins,
+          author: this.authors,
           copyright: this.copyright,
-          ccli_number: songId,
+          ccli_number: this.id,
           hidden: false,
           themes: this.themes,
-        }
-      }
+        },
+      },
     };
   }
 
-  static _extractBpm(bpm) {
+  static _extractBpm(bpm?: string | number | null): number {
     if (bpm && !isNaN(Number(bpm))) {
       return Number(bpm);
-    } else {
-      return null;
     }
+
+    return 0; // Default to 0 if bpm is not valid
   }
 
-  static _extractAdmin(admin) {
-    if (Array.isArray(admin)) {
-      return admin.map(a => typeof a === "string" ? a : a.label).join(", ");
-    } else if (typeof admin === "string") {
-      return admin;
-    } else {
-      return "";
+  static _extractAdmins(admins: Admins): string[] {
+    if (Array.isArray(admins)) {
+      return admins.map((a) =>
+        typeof a === "string" ? a.trim() : a.label.trim()
+      );
+    } else if (typeof admins === "string") {
+      return [admins.trim()];
     }
+
+    return [];
   }
 
-  static _extractAuthor(author) {
-    if (Array.isArray(author)) {
-      return author.map(a => typeof a === "string" ? a.trim() : a.label.trim()).join(", ");
-    } else if (typeof author === "string") {
-      return author.trim();
-    } else {
-      return "";
+  static _extractAuthors(authors: Authors): string[] {
+    if (Array.isArray(authors)) {
+      return authors.map((a) =>
+        typeof a === "string" ? a.trim() : a.label.trim()
+      );
+    } else if (typeof authors === "string") {
+      return [authors.trim()];
     }
+
+    return [];
   }
 
-  static _extractDefaultKey(defaultKey) {
-    return Array.isArray(defaultKey) && defaultKey.length > 0 ? defaultKey[0] : "C";
+  static _extractDefaultKey(defaultKey: string[] | null | undefined): string {
+    return Array.isArray(defaultKey) && defaultKey.length > 0
+      ? defaultKey[0]
+      : "C";
   }
 
-  static _extractThemes(themes) {
-    return Array.isArray(themes) ? themes.map(t => typeof t === "string" ? t : t.label) : [];
+  static _extractThemes(themes: any): string {
+    const themeList = Array.isArray(themes)
+      ? themes.map((t) => (typeof t === "string" ? t : t.label))
+      : [];
+    return themeList.length > 0 ? themeList.join(", ") : "";
   }
 }
 
@@ -800,87 +932,98 @@ class SongDetails {
  * @param {number} fileSize - The size of the file in bytes
  */
 class FileAttributes {
-  constructor(
-    name = "",
-    contentType = "",
-    fileSize = 0,
-  ) {
+  name: string;
+  contentType: string;
+  fileSize: number;
+
+  constructor(name = "", contentType = "", fileSize = 0) {
     this.name = name;
     this.contentType = contentType;
     this.fileSize = fileSize;
   }
 
-  static deserialize(json) {
-    return new FileAttributes(
-      json.name,
-      json.content_type,
-      json.file_size,
-    );
+  static deserialize(json: any): FileAttributes {
+    return new FileAttributes(json.name, json.content_type, json.file_size);
   }
 }
 
-/**
- * Represents a file in Planning Center - returned from the upload API
- * @param {string} id - The ID of the file
- * @param {string} type - The type of the file
- * @param {FileAttributes} attributes - The attributes of the file
- */
 class PlanningCenterFile {
-  constructor(
-    id = "",
-    type = "",
-    attributes = new FileAttributes(),
-  ) {
+  id: string;
+  type: string;
+  attributes: FileAttributes;
+
+  constructor(id = "", type = "File", attributes = new FileAttributes()) {
     this.id = id;
     this.type = type;
     this.attributes = attributes;
   }
 
-  static deserialize(json) {
-    if (!json || !Array.isArray(json) || json.length === 0) {
-      throw new Error("Invalid JSON data for PlanningCenterFile");
+  static deserialize(json: any): PlanningCenterFile {
+    if (!json || !json.id || !json.type || !json.attributes) {
+      throw new Error("Invalid Planning Center file data");
     }
 
-    const firstFile = json[0];
-
     return new PlanningCenterFile(
-      firstFile.id,
-      firstFile.type,
-      FileAttributes.deserialize(firstFile.attributes),
+      json.id,
+      json.type,
+      FileAttributes.deserialize(json.attributes)
     );
+  }
+}
+
+type PlanningCenterSong = {
+  id: string;
+  type: string;
+  attributes: {
+    admin: string;
+    author: string;
+    copyright: string;
+    title: string;
+    ccli_number: number;
   }
 }
 
 class PlanningCenterAPI {
   static BASE_URL = "https://api.planningcenteronline.com/services/v2";
-  static FILE_UPLOAD_ENDPOINT = "https://upload.planningcenteronline.com/v2/files";
+  static FILE_UPLOAD_ENDPOINT =
+    "https://upload.planningcenteronline.com/v2/files";
+
+  tokenStorage: TokenStorage;
+  httpClient: ExtensionHttpClient;
 
   constructor() {
     this.tokenStorage = new TokenStorage();
     this.httpClient = new ExtensionHttpClient();
   }
 
-  async findSongById(ccliID) {
-    const json = await this._getRequest(`/songs?where[ccli_number]=${ccliID}`);
+  async findSongByCcliId(ccliId: number): Promise<PlanningCenterSong> {
+    const json = await this._getRequest(`/songs?where[ccli_number]=${ccliId}`);
     if (!json.data || json.data.length === 0) {
-      throw new Error(`No song found with CCLI ID ${ccliID}`);
+      throw new Error(`No song found with CCLI ID ${ccliId}`);
     }
 
     return json.data[0];
   }
 
-  async addSong(songId, songDetails) {
-    const songPayload = songDetails.serializeForPlanningCenter(songId);
+  async addSong(songDetails: CCLISongDetails): Promise<any> {
+    const songPayload = songDetails.serializeForPlanningCenter();
     const json = await this._postRequest("/songs", songPayload);
     return json.data;
   }
 
-  async getArrangements(songId) {
+  async getArrangements(songId: number): Promise<any> {
     const json = await this._getRequest(`/songs/${songId}/arrangements`);
     return json.data;
   }
 
-  async updateArrangement(songApiId, arrangementId, arrangementKey, chordPro, tempo = 0, lyricsEnabled = true) {
+  async updateArrangement(
+    songApiId: number,
+    arrangementId: number,
+    arrangementKey: string,
+    chordPro: string,
+    tempo = 0,
+    lyricsEnabled = true
+  ) {
     const payload = {
       data: {
         type: "Arrangement",
@@ -889,39 +1032,55 @@ class PlanningCenterAPI {
           lyrics_enabled: lyricsEnabled,
           chord_chart: chordPro,
           bpm: tempo,
-        }
-      }
+        },
+      },
     };
-    return await this._patchRequest(`/songs/${songApiId}/arrangements/${arrangementId}`, payload);
+    return await this._patchRequest(
+      `/songs/${songApiId}/arrangements/${arrangementId}`,
+      payload
+    );
   }
 
-  async getArrangementKeys(songApiId, arrangementId) {
-    const json = await this._getRequest(`/songs/${songApiId}/arrangements/${arrangementId}/keys`);
+  async getArrangementKeys(
+    songApiId: number,
+    arrangementId: number
+  ): Promise<any> {
+    const json = await this._getRequest(
+      `/songs/${songApiId}/arrangements/${arrangementId}/keys`
+    );
     return json.data;
   }
 
-  async addArrangementKey(songApiId, arrangementId, startingKey) {
+  async addArrangementKey(
+    songApiId: number,
+    arrangementId: number,
+    startingKey: string
+  ) {
     const keysPayload = {
       data: {
         type: "Key",
         attributes: {
           name: "Default",
           starting_key: startingKey,
-        }
-      }
+        },
+      },
     };
 
-    return await this._postRequest(`/songs/${songApiId}/arrangements/${arrangementId}/keys`, keysPayload);
+    return await this._postRequest(
+      `/songs/${songApiId}/arrangements/${arrangementId}/keys`,
+      keysPayload
+    );
   }
 
   /**
    * Uploads a leadsheet PDF to Planning Center
-   * @param {SongDetails} songDetails the song details
-   * @param {number} songId the planning center song ID
-   * @param {number} arrangementId 
-   * @param {Blob} blob 
    */
-  async uploadLeadsheet(songDetails, songId, arrangementId, blob) {
+  async uploadLeadsheet(
+    songDetails: CCLISongDetails,
+    songId: number,
+    arrangementId: number,
+    blob: Blob
+  ) {
     const filename = this._generateFilename(songDetails, "lead");
     const file = await this._uploadFile(blob, filename);
     return await this._attachFileToArrangement(songId, arrangementId, file);
@@ -929,12 +1088,13 @@ class PlanningCenterAPI {
 
   /**
    * Uploads a vocal sheet PDF to Planning Center
-   * @param {SongDetails} songDetails 
-   * @param {number} songId 
-   * @param {number} arrangementId 
-   * @param {Blob} blob 
    */
-  async uploadVocalSheet(songDetails, songId, arrangementId, blob) {
+  async uploadVocalSheet(
+    songDetails: CCLISongDetails,
+    songId: number,
+    arrangementId: number,
+    blob: Blob
+  ) {
     const filename = this._generateFilename(songDetails, "vocal");
     const file = await this._uploadFile(blob, filename);
     return await this._attachFileToArrangement(songId, arrangementId, file);
@@ -942,12 +1102,12 @@ class PlanningCenterAPI {
 
   /**
    * Generates a sanitized filename for uploading
-   * @param {SongDetails} songDetails the song details
-   * @param {string} fileType the type of file (e.g., "lead", "vocal")
-   * @returns {string} sanitized filename
    */
-  _generateFilename(songDetails, fileType) {
-    const sanitizedTitle = songDetails.title.replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "_");
+  _generateFilename(songDetails: CCLISongDetails, fileType: string): string {
+    const sanitizedTitle = songDetails.title
+      .replace(/[^\w\s-]/g, "")
+      .trim()
+      .replace(/\s+/g, "_");
     return `${sanitizedTitle}-${songDetails.key}-${fileType}.pdf`;
   }
 
@@ -957,7 +1117,7 @@ class PlanningCenterAPI {
    * @param {string} filename the filename to use
    * @returns {Promise<PlanningCenterFile>} the uploaded file object
    */
-  async _uploadFile(blob, filename) {
+  async _uploadFile(blob: Blob, filename: string): Promise<PlanningCenterFile> {
     // Validate inputs
     if (!blob || !filename) {
       throw new Error("Invalid blob or filename provided to _uploadFile");
@@ -973,7 +1133,11 @@ class PlanningCenterAPI {
     }
 
     try {
-      const response = await this.httpClient.post(PlanningCenterAPI.FILE_UPLOAD_ENDPOINT, null, formData);
+      const response = await this.httpClient.post(
+        PlanningCenterAPI.FILE_UPLOAD_ENDPOINT,
+        undefined,
+        formData
+      );
       if (response.status < 200 || response.status >= 300) {
         throw new Error(`Failed to upload ${filename}.`);
       }
@@ -985,32 +1149,35 @@ class PlanningCenterAPI {
         throw new Error(`Failed to upload ${filename}.`);
       }
 
-      return PlanningCenterFile.deserialize(json.data);
+      return PlanningCenterFile.deserialize(json.data[0]);
     } catch (error) {
       console.error("File upload failed:", error);
-      throw new Error(`Failed to upload ${filename}: ${error.message}`);
+      throw new Error(`Failed to upload ${filename}: ${error}`);
     }
   }
 
   /**
    * Attaches an uploaded file to an arrangement
-   * @param {number} songId the planning center song ID
-   * @param {number} arrangementId the arrangement ID
-   * @param {PlanningCenterFile} file the file object from upload
-   * @returns {Promise<Object>} the attachment response
    */
-  async _attachFileToArrangement(songId, arrangementId, file) {
+  async _attachFileToArrangement(
+    songId: number,
+    arrangementId: number,
+    file: PlanningCenterFile
+  ): Promise<object> {
     const payload = {
       data: {
         type: "Attachment",
         attributes: {
           file_upload_identifier: file.id,
           filename: file.attributes.name,
-        }
-      }
+        },
+      },
     };
 
-    const attachResponse = await this._postRequest(`/songs/${songId}/arrangements/${arrangementId}/attachments`, payload);
+    const attachResponse = await this._postRequest(
+      `/songs/${songId}/arrangements/${arrangementId}/attachments`,
+      payload
+    );
     if (attachResponse.status < 200 || attachResponse.status >= 300) {
       throw new Error("Failed to attach file.", attachResponse);
     }
@@ -1019,19 +1186,19 @@ class PlanningCenterAPI {
     return attachResponse;
   }
 
-  async _getRequest(endpoint) {
+  async _getRequest(endpoint: string) {
     return this._request("GET", endpoint);
   }
 
-  async _postRequest(endpoint, payload) {
+  async _postRequest(endpoint: string, payload: any) {
     return this._request("POST", endpoint, payload);
   }
 
-  async _patchRequest(endpoint, payload) {
+  async _patchRequest(endpoint: string, payload: any) {
     return this._request("PATCH", endpoint, payload);
   }
 
-  async _request(method, endpoint, payload = null) {
+  async _request(method: string, endpoint: string, payload: any = null) {
     const url = `${PlanningCenterAPI.BASE_URL}${endpoint}`;
     const defaultHeaders = await this.getDefaultHeaders();
     let response;
@@ -1040,10 +1207,18 @@ class PlanningCenterAPI {
         response = await this.httpClient.get(url, defaultHeaders);
         break;
       case "POST":
-        response = await this.httpClient.post(url, defaultHeaders, JSON.stringify(payload));
+        response = await this.httpClient.post(
+          url,
+          defaultHeaders,
+          JSON.stringify(payload)
+        );
         break;
       case "PATCH":
-        response = await this.httpClient.patch(url, defaultHeaders, JSON.stringify(payload));
+        response = await this.httpClient.patch(
+          url,
+          defaultHeaders,
+          JSON.stringify(payload)
+        );
         break;
       default:
         throw new Error(`Unsupported HTTP method: ${method}`);
@@ -1055,7 +1230,7 @@ class PlanningCenterAPI {
   async getDefaultHeaders() {
     const accessToken = await this.tokenStorage.getAccessToken();
     return {
-      "Authorization": `Bearer ${accessToken}`,
+      Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     };
   }
@@ -1063,12 +1238,18 @@ class PlanningCenterAPI {
 
 class ProgressIndicator {
   static AUTO_CLOSE_DELAY_IN_MS = 3000;
+  modal: HTMLElement;
+  progressBar: HTMLElement;
+  statusText: HTMLElement;
+  detailsText: HTMLElement;
+  currentStep: number;
+  totalSteps: number;
 
   constructor() {
-    this.modal = null;
-    this.progressBar = null;
-    this.statusText = null;
-    this.detailsText = null;
+    this.modal = document.createElement("div");
+    this.progressBar = document.createElement("div");
+    this.statusText = document.createElement("div");
+    this.detailsText = document.createElement("div");
     this.currentStep = 0;
     this.totalSteps = 0;
   }
@@ -1080,7 +1261,7 @@ class ProgressIndicator {
     this.showModal();
   }
 
-  updateProgress(step, statusText, detailsText = "") {
+  updateProgress(step: number, statusText: string, detailsText = "") {
     if (!this.modal) {
       return;
     }
@@ -1091,11 +1272,13 @@ class ProgressIndicator {
     // Remove any state classes and update width
     this.progressBar.classList.remove("error", "success", "complete");
     this.progressBar.style.width = `${percentage}%`;
+
     this.statusText.textContent = statusText;
+
     this.detailsText.textContent = detailsText;
   }
 
-  setError(errorText, detailsText = "") {
+  setError(errorText: string, detailsText = "") {
     if (!this.modal) {
       return;
     }
@@ -1109,10 +1292,14 @@ class ProgressIndicator {
     closeBtn.textContent = "Close";
     closeBtn.className = "ccli-btn ccli-btn-secondary";
     closeBtn.onclick = () => this.close();
-    this.modal.querySelector(".ccli-modal-footer").appendChild(closeBtn);
+
+    const footer = this.modal.querySelector(".ccli-modal-footer");
+    if (footer) {
+      footer.appendChild(closeBtn);
+    }
   }
 
-  setSuccess(successText, detailsText = "") {
+  setSuccess(successText: string, detailsText = "") {
     if (!this.modal) {
       return;
     }
@@ -1124,12 +1311,12 @@ class ProgressIndicator {
     setTimeout(() => this.close(), ProgressIndicator.AUTO_CLOSE_DELAY_IN_MS);
   }
 
-  async createModal(title) {
+  async createModal(title: string) {
     this.remove();
 
     const html = await TemplateLoader.loadTemplate("progress-modal");
     const content = TemplateLoader.populateTemplate(html, {
-      title
+      title,
     });
 
     this.modal = document.createElement("div");
@@ -1137,9 +1324,15 @@ class ProgressIndicator {
     this.modal.appendChild(content);
 
     // Store references to progress elements
-    this.progressBar = this.modal.querySelector(".ccli-progress-bar");
-    this.statusText = this.modal.querySelector(".ccli-progress-status");
-    this.detailsText = this.modal.querySelector(".ccli-progress-details");
+    this.progressBar = this.modal.querySelector(
+      ".ccli-progress-bar"
+    ) as HTMLElement;
+    this.statusText = this.modal.querySelector(
+      ".ccli-progress-status"
+    ) as HTMLElement;
+    this.detailsText = this.modal.querySelector(
+      ".ccli-progress-details"
+    ) as HTMLElement;
 
     document.body.appendChild(this.modal);
   }
@@ -1156,7 +1349,6 @@ class ProgressIndicator {
   remove() {
     if (this.modal) {
       this.modal.remove();
-      this.modal = null;
     }
   }
 }
@@ -1164,13 +1356,13 @@ class ProgressIndicator {
 class TemplateLoader {
   static cache = new Map();
 
-  static async loadTemplate(templateName) {
+  static async loadTemplate(templateName: string): Promise<string> {
     if (this.cache.has(templateName)) {
       return this.cache.get(templateName);
     }
 
     try {
-      const url = browserAPI.runtime.getURL(`templates/${templateName}.html`);
+      const url = browser.runtime.getURL(`templates/${templateName}.html`);
       const response = await fetch(url);
       const html = await response.text();
       this.cache.set(templateName, html);
@@ -1181,10 +1373,14 @@ class TemplateLoader {
     }
   }
 
-  static populateTemplate(html, data) {
+  static populateTemplate(html: string, data: any) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, "text/html");
     const container = doc.body.firstElementChild;
+
+    if (!container) {
+      throw new Error("Template does not contain a root element.");
+    }
 
     // Replace text content for data-template attributes
     Object.entries(data).forEach(([key, value]) => {
@@ -1192,7 +1388,7 @@ class TemplateLoader {
       if (element) {
         if (key === "form" && Array.isArray(value)) {
         } else {
-          element.textContent = value;
+          element.textContent = String(value);
         }
       }
     });
@@ -1200,11 +1396,11 @@ class TemplateLoader {
     return container;
   }
 
-  static clearAndPopulateFormFields(element, fields) {
+  static clearAndPopulateFormFields(element: HTMLElement, fields: any[]) {
     // Clear existing content
     element.replaceChildren();
 
-    fields.forEach(field => {
+    fields.forEach((field) => {
       const formGroup = document.createElement("div");
       formGroup.className = "ccli-form-group";
 
@@ -1231,32 +1427,49 @@ class TemplateLoader {
 }
 
 class ConfirmationModal {
+  modal: HTMLElement;
+  resolvePromise: (result: boolean) => void;
+  escapeHandler: (e: KeyboardEvent) => void;
+  enterHandler: (e: KeyboardEvent) => void;
+
   constructor() {
-    this.modal = null;
-    this.resolvePromise = null;
-    this.escapeHandler = null;
-    this.enterHandler = null;
+    this.modal = document.createElement("div");
+    this.resolvePromise = (_: boolean) => {};
+    this.escapeHandler = (_: KeyboardEvent) => {};
+    this.enterHandler = (_: KeyboardEvent) => {};
   }
 
   /**
    * Shows a custom confirmation dialog
-   * @param {string} title - Modal title
-   * @param {string} message - Confirmation message
-   * @param {string} confirmText - Text for confirm button (default: "Confirm")
-   * @param {string} cancelText - Text for cancel button (default: "Cancel")
-   * @param {string} confirmType - Button type: "primary", "danger" (default: "primary")
-   * @returns {Promise<boolean>} - Promise that resolves with true/false
    */
-  async show(title, message, confirmText = "Confirm", cancelText = "Cancel", confirmType = "primary") {
+  async show(
+    title: string,
+    message: string,
+    confirmText: string = "Confirm",
+    cancelText: string = "Cancel",
+    confirmType: string = "primary"
+  ): Promise<boolean> {
     return new Promise(async (resolve) => {
       this.resolvePromise = resolve;
-      await this.createModal(title, message, confirmText, cancelText, confirmType);
+      await this.createModal(
+        title,
+        message,
+        confirmText,
+        cancelText,
+        confirmType
+      );
       this.addEventListeners();
       this.showModal();
     });
   }
 
-  async createModal(title, message, confirmText, cancelText, confirmType) {
+  async createModal(
+    title: string,
+    message: string,
+    confirmText: string,
+    cancelText: string,
+    confirmType: string
+  ) {
     this.remove();
 
     const html = await TemplateLoader.loadTemplate("confirmation-modal");
@@ -1264,11 +1477,13 @@ class ConfirmationModal {
       title,
       message,
       confirmText,
-      cancelText
+      cancelText,
     });
 
     // Update button type
-    const confirmBtn = content.querySelector("#ccli-confirm-ok");
+    const confirmBtn = content.querySelector(
+      "#ccli-confirm-ok"
+    ) as HTMLButtonElement;
     confirmBtn.className = `ccli-btn ccli-btn-${confirmType}`;
 
     this.modal = document.createElement("div");
@@ -1295,28 +1510,52 @@ class ConfirmationModal {
     };
 
     // Close button
-    this.modal.querySelector(".ccli-modal-close").addEventListener("click", (e) => {
+    const closeButton = this.modal.querySelector(".ccli-modal-close");
+    if (!closeButton) {
+      console.error("Close button not found in confirmation modal.");
+      return;
+    }
+
+    closeButton.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
       this.close(false);
     });
 
     // Cancel button
-    this.modal.querySelector("#ccli-confirm-cancel").addEventListener("click", (e) => {
+    const cancelButton = this.modal.querySelector("#ccli-confirm-cancel");
+    if (!cancelButton) {
+      console.error("Cancel button not found in confirmation modal.");
+      return;
+    }
+
+    cancelButton.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
       this.close(false);
     });
 
     // Confirm button
-    this.modal.querySelector("#ccli-confirm-ok").addEventListener("click", (e) => {
+    const confirmButton = this.modal.querySelector("#ccli-confirm-ok");
+    if (!confirmButton) {
+      console.error("Confirm button not found in confirmation modal.");
+      return;
+    }
+
+    confirmButton.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
       this.close(true);
     });
 
     // Overlay click
-    this.modal.querySelector(".ccli-modal-overlay").addEventListener("click", (e) => {
+    const overlay = this.modal.querySelector(".ccli-modal-overlay");
+    if (!overlay) {
+      console.error("Modal overlay not found in confirmation modal.");
+      return;
+    }
+
+    overlay.addEventListener("click", (e) => {
       if (e.target === e.currentTarget) {
         e.preventDefault();
         e.stopPropagation();
@@ -1334,15 +1573,18 @@ class ConfirmationModal {
     this.modal.classList.add("ccli-modal-visible");
     // Focus confirm button
     setTimeout(() => {
-      const confirmButton = this.modal.querySelector("#ccli-confirm-ok");
-      if (confirmButton) confirmButton.focus();
+      const confirmButton = this.modal.querySelector(
+        "#ccli-confirm-ok"
+      ) as HTMLButtonElement;
+      if (confirmButton) {
+        confirmButton.focus();
+      }
     }, 100);
   }
 
-  close(result) {
+  close(result: boolean) {
     if (this.resolvePromise) {
       this.resolvePromise(result);
-      this.resolvePromise = null;
     }
     this.remove();
   }
@@ -1352,20 +1594,30 @@ class ConfirmationModal {
       // Clean up event listeners
       if (this.escapeHandler) {
         document.removeEventListener("keydown", this.escapeHandler);
-        this.escapeHandler = null;
       }
       if (this.enterHandler) {
         document.removeEventListener("keydown", this.enterHandler);
-        this.enterHandler = null;
       }
 
       this.modal.remove();
-      this.modal = null;
     }
   }
 }
 
+type PendingCcliImport = {
+  songId: number;
+  slug: string;
+};
+
 class App {
+  authFlow: OAuthFlow;
+  tokenStorage: TokenStorage;
+  planningCenterAPI: PlanningCenterAPI;
+  songSelectAPI: SongSelectAPI;
+  songFinder: SongFinder;
+  progressIndicator: ProgressIndicator;
+  confirmationModal: ConfirmationModal;
+
   constructor() {
     this.authFlow = new OAuthFlow();
     this.tokenStorage = new TokenStorage();
@@ -1376,34 +1628,43 @@ class App {
     this.confirmationModal = new ConfirmationModal();
   }
 
-  async continueImportAfterAuth(pendingImport) {
+  async continueImportAfterAuth(pendingImport: PendingCcliImport) {
     try {
       console.info(`Continuing import for song ${pendingImport.songId}...`);
-      await this.performImport(pendingImport.songId, pendingImport.slug);
+      await this.performImport(pendingImport);
     } catch (error) {
       console.error("Failed to continue import after auth:", error);
-      alert([
-        "❌ Failed to continue import",
-        "",
-        "Please try importing the song again manually."
-      ].join("\n"));
+      alert(
+        [
+          "❌ Failed to continue import",
+          "",
+          "Please try importing the song again manually.",
+        ].join("\n")
+      );
     }
   }
 
   async importSongToPlanningCenter() {
     try {
       if (!this.isCorrectPage()) {
-        alert([
-          "❌ Wrong page!",
-          "",
-          "Please navigate to a song page on CCLI SongSelect first.",
-          "The URL should look like: https://songselect.ccli.com/songs/1234567/song-title"
-        ].join("\n"));
+        alert(
+          [
+            "❌ Wrong page!",
+            "",
+            "Please navigate to a song page on CCLI SongSelect first.",
+            "The URL should look like: https://songselect.ccli.com/songs/1234567/song-title",
+          ].join("\n")
+        );
         return;
       }
 
       const ccliSongId = this.songFinder.getSongId();
-      const slug = location.pathname.split("/").pop();
+      const slug = location.pathname.split("/").pop() as string;
+
+      const pendingImport: PendingCcliImport = {
+        songId: ccliSongId,
+        slug,
+      };
 
       // Handle login if needed - but make it seamless
       const isTokenValid = await this.tokenStorage.isTokenValid();
@@ -1411,7 +1672,7 @@ class App {
         const refreshToken = await this.tokenStorage.getRefreshToken();
         if (!refreshToken) {
           // Store pending import before showing login
-          await this.tokenStorage.setPendingImport(ccliSongId, slug);
+          await this.tokenStorage.setPendingImport(pendingImport);
 
           // Start login immediately without asking
           console.info("🔐 Authentication required, starting login flow...");
@@ -1425,7 +1686,7 @@ class App {
           console.error("Failed to refresh token:", err);
 
           // Store pending import before re-authentication
-          await this.tokenStorage.setPendingImport(ccliSongId, slug);
+          await this.tokenStorage.setPendingImport(pendingImport);
 
           console.info("🔐 Token refresh failed, starting login flow...");
           this.authFlow.startLogin();
@@ -1437,16 +1698,17 @@ class App {
       await this.tokenStorage.clearPendingImport();
 
       // Proceed with import
-      await this.performImport(ccliSongId, slug);
-
+      await this.performImport(pendingImport);
     } catch (error) {
       console.error("Import initiation failed:", error);
       await this.tokenStorage.clearPendingImport();
-      alert(`❌ Failed to start import: ${error.message}`);
+      if (error instanceof Error) {
+        alert(`❌ Failed to start import: ${error.message}`);
+      }
     }
   }
 
-  async performImport(ccliSongId, slug) {
+  async performImport(pendingImport: PendingCcliImport) {
     let progress = null;
 
     try {
@@ -1455,14 +1717,28 @@ class App {
       progress.show("Importing Song to Planning Center", 7);
 
       // Step 1: Get song details
-      progress.updateProgress(1, "Getting song information...", "Reading CCLI song data");
-      const songDetails = await this.songSelectAPI.fetchSongDetails(ccliSongId, slug);
+      progress.updateProgress(
+        1,
+        "Getting song information...",
+        "Reading CCLI song data"
+      );
+      const songDetails = await this.songSelectAPI.fetchSongDetails(
+        pendingImport
+      );
+      console.debug("Song details fetched:", songDetails);
 
       // Step 2: Check if song exists
-      progress.updateProgress(2, "Checking Planning Center...", "Looking for existing song");
-      const existingSong = await this.planningCenterAPI.findSongById(ccliSongId).catch(console.debug);
+      progress.updateProgress(
+        2,
+        "Checking Planning Center...",
+        "Looking for existing song"
+      );
+      const existingSong = await this.planningCenterAPI
+        .findSongByCcliId(pendingImport.songId)
+        .catch(console.debug);
+      console.debug("Existing song found:", existingSong);
 
-      if (existingSong && !await this.confirmSongUpdate()) {
+      if (existingSong && !(await this.confirmSongUpdate())) {
         progress.close();
         return;
       }
@@ -1470,56 +1746,119 @@ class App {
       // Step 3: Create or get song
       let songId;
       if (existingSong) {
-        progress.updateProgress(3, "Using existing song...", `Found: ${songDetails.title}`);
+        progress.updateProgress(
+          3,
+          "Using existing song...",
+          `Found: ${songDetails.title}`
+        );
         songId = existingSong.id;
+        console.debug(existingSong);
+        console.debug(`Found existing song: ${existingSong.id}`);
       } else {
-        progress.updateProgress(3, "Creating new song...", `Adding: ${songDetails.title}`);
-        songId = await this.createNewSong(ccliSongId, songDetails);
+        progress.updateProgress(
+          3,
+          "Creating new song...",
+          `Adding: ${songDetails.title}`
+        );
+        songId = await this.createNewSong(songDetails);
         if (!songId) {
-          progress.setError("Failed to create song", "Could not add song to Planning Center");
+          progress.setError(
+            "Failed to create song",
+            "Could not add song to Planning Center"
+          );
           return;
         }
+        console.debug(
+          `No existing song found, created a new song with this ID: ${pendingImport.songId}`
+        );
       }
 
       // Step 4: Get arrangement
-      progress.updateProgress(4, "Setting up arrangement...", "Configuring song structure");
+      progress.updateProgress(
+        4,
+        "Setting up arrangement...",
+        "Configuring song structure"
+      );
       const arrangementId = await this.getArrangementId(songId, songDetails);
       if (!arrangementId) {
-        progress.setError("Failed to get arrangement", "Could not access song arrangement");
+        progress.setError(
+          "Failed to get arrangement",
+          "Could not access song arrangement"
+        );
         return;
       }
+      console.debug(`Arrangement ID: ${arrangementId}`);
 
       // Step 5: Update with ChordPro
-      progress.updateProgress(5, "Downloading ChordPro...", "Getting chord charts from CCLI");
-      if (!await this.updateArrangementWithChordPro(songId, arrangementId, songDetails)) {
-        progress.setError("Failed to update chords", "Could not download or apply chord chart");
+      progress.updateProgress(
+        5,
+        "Downloading ChordPro...",
+        "Getting chord charts from CCLI"
+      );
+      if (
+        !(await this.updateArrangementWithChordPro(
+          songId,
+          arrangementId,
+          songDetails
+        ))
+      ) {
+        progress.setError(
+          "Failed to update chords",
+          "Could not download or apply chord chart"
+        );
         return;
       }
+      console.debug("ChordPro updated successfully in Planning Center");
 
       // Step 6: Setup keys
-      progress.updateProgress(6, "Setting up keys...", `Configuring key: ${songDetails.key}`);
-      await this.ensureArrangementKeyExists(songId, arrangementId, songDetails.key);
+      progress.updateProgress(
+        6,
+        "Setting up keys...",
+        `Configuring key: ${songDetails.key}`
+      );
+      await this.ensureArrangementKeyExists(
+        songId,
+        arrangementId,
+        songDetails.key
+      );
 
       // Step 7: Upload additional files
-      progress.updateProgress(7, "Uploading additional files...", "Adding leadsheets and vocal sheets");
+      progress.updateProgress(
+        7,
+        "Uploading additional files...",
+        "Adding leadsheet and vocal sheet if available"
+      );
       await this.uploadLeadsheetIfAvailable(songDetails, songId, arrangementId);
-      await this.uploadVocalSheetIfAvailable(songDetails, songId, arrangementId);
+      await this.uploadVocalSheetIfAvailable(
+        songDetails,
+        songId,
+        arrangementId
+      );
 
-      progress.setSuccess("Song imported successfully!", `${songDetails.title} is now available in Planning Center`);
-
+      progress.setSuccess(
+        "Song imported successfully!",
+        `${songDetails.title} is now available in Planning Center`
+      );
     } catch (error) {
       console.error("Import failed:", error);
 
       let errorMessage = "Import failed";
-      let errorDetails = error.message;
+      let errorDetails = error instanceof Error ? error.message : String(error);
 
-      if (error.message.includes("No song found")) {
+      if (errorDetails.includes("No song found")) {
         errorMessage = "Song not found";
-        errorDetails = "This song is not in your Planning Center library yet, but the import will create it.";
-      } else if (error.message.includes("401") || error.message.includes("Unauthorized")) {
+        errorDetails =
+          "This song is not in your Planning Center library yet, but the import will create it.";
+      } else if (
+        errorDetails.includes("401") ||
+        errorDetails.includes("Unauthorized")
+      ) {
         errorMessage = "Authentication failed";
         errorDetails = "Please try the import again to re-authenticate.";
-      } else if (error.message.includes("403") || error.message.includes("Forbidden")) {
+      } else if (
+        errorDetails.includes("403") ||
+        errorDetails.includes("Forbidden")
+      ) {
         errorMessage = "Permission denied";
         errorDetails = `You don"t have permission to add songs to Planning Center. Please check with your administrator.`;
       }
@@ -1536,7 +1875,8 @@ class App {
     console.info("Song already exists in Planning Center.");
 
     const title = "Song Already Exists";
-    const message = "This song already exists in Planning Center. Do you want to update the default arrangement with the current ChordPro and leadsheet?";
+    const message =
+      "This song already exists in Planning Center. Do you want to update the default arrangement with the current ChordPro and leadsheet?";
 
     return await this.confirmationModal.show(
       title,
@@ -1547,9 +1887,9 @@ class App {
     );
   }
 
-  async createNewSong(ccliSongId, songDetails) {
+  async createNewSong(songDetails: CCLISongDetails) {
     try {
-      const createdSong = await this.planningCenterAPI.addSong(ccliSongId, songDetails);
+      const createdSong = await this.planningCenterAPI.addSong(songDetails);
       console.info("✅ Song added to Planning Center!");
 
       if (!createdSong.id) {
@@ -1563,9 +1903,13 @@ class App {
     }
   }
 
-  async getArrangementId(songId, songDetails) {
+  async getArrangementId(songId: number, songDetails: CCLISongDetails) {
+    console.debug("Fetching arrangements for song ID:", songId);
+
     try {
-      const existingArrangements = await this.planningCenterAPI.getArrangements(songId);
+      const existingArrangements = await this.planningCenterAPI.getArrangements(
+        songId
+      );
 
       if (!existingArrangements || existingArrangements.length === 0) {
         throw new Error("No arrangements found for this song.");
@@ -1580,14 +1924,19 @@ class App {
       console.info("✅ Arrangement found in Planning Center!");
       return arrangementId;
     } catch (err) {
-      console.error("Failed to fetch arrangements:", err);
-      throw new Error("Failed to fetch song arrangements");
+      throw new Error(`Failed to fetch song arrangements: ${err}`);
     }
   }
 
-  async updateArrangementWithChordPro(songId, arrangementId, songDetails) {
+  async updateArrangementWithChordPro(
+    songId: number,
+    arrangementId: number,
+    songDetails: CCLISongDetails
+  ) {
     try {
-      const chordProResponse = await this.songSelectAPI.fetchChordProText(songDetails);
+      const chordProResponse = await this.songSelectAPI.fetchChordProText(
+        songDetails
+      );
       console.info("✅ ChordPro text fetched successfully.");
 
       await this.planningCenterAPI.updateArrangement(
@@ -1606,13 +1955,22 @@ class App {
     }
   }
 
-  async ensureArrangementKeyExists(songId, arrangementId, key) {
+  async ensureArrangementKeyExists(
+    songId: number,
+    arrangementId: number,
+    key: string
+  ) {
     try {
-      const existingKeys = await this.planningCenterAPI.getArrangementKeys(songId, arrangementId);
+      const existingKeys = await this.planningCenterAPI.getArrangementKeys(
+        songId,
+        arrangementId
+      );
 
       if (existingKeys && existingKeys.length > 0) {
         console.info("Existing keys found in Planning Center.");
-        const existingKey = existingKeys.find(k => k.attributes.starting_key === key);
+        const existingKey = existingKeys.find(
+          (k: any) => k.attributes.starting_key === key
+        );
 
         if (existingKey) {
           return existingKey;
@@ -1620,7 +1978,11 @@ class App {
       }
 
       console.info("No existing key found. Adding default key...");
-      const newKey = await this.planningCenterAPI.addArrangementKey(songId, arrangementId, key);
+      const newKey = await this.planningCenterAPI.addArrangementKey(
+        songId,
+        arrangementId,
+        key
+      );
       console.info("✅ Added default key for arrangement:", key);
       return newKey;
     } catch (error) {
@@ -1630,14 +1992,20 @@ class App {
     }
   }
 
-  async uploadLeadsheetIfAvailable(songDetails, songId, arrangementId) {
+  async uploadLeadsheetIfAvailable(
+    songDetails: CCLISongDetails,
+    songId: number,
+    arrangementId: number
+  ) {
     if (!this.isProductAvailable(songDetails.products.lead)) {
       console.info("Vocal sheet is unavailable for this song.");
       return;
     }
 
     try {
-      const leadsheetBlob = await this.songSelectAPI.downloadLeadsheet(songDetails);
+      const leadsheetBlob = await this.songSelectAPI.downloadLeadsheet(
+        songDetails
+      );
       console.info("✅ Leadsheet downloaded successfully.");
 
       await this.planningCenterAPI.uploadLeadsheet(
@@ -1656,19 +2024,21 @@ class App {
 
   /**
    * Uploads a vocal sheet PDF to Planning Center if available
-   * @param {SongDetails} songDetails 
-   * @param {number} songId 
-   * @param {number} arrangementId 
-   * @returns 
    */
-  async uploadVocalSheetIfAvailable(songDetails, songId, arrangementId) {
+  async uploadVocalSheetIfAvailable(
+    songDetails: CCLISongDetails,
+    songId: number,
+    arrangementId: number
+  ): Promise<void> {
     if (!this.isProductAvailable(songDetails.products.vocal)) {
       console.info("Vocal sheet is unavailable for this song.");
       return;
     }
 
     try {
-      const vocalSheetBlob = await this.songSelectAPI.downloadVocalSheet(songDetails);
+      const vocalSheetBlob = await this.songSelectAPI.downloadVocalSheet(
+        songDetails
+      );
       console.info("✅ Vocal sheet downloaded successfully.");
 
       await this.planningCenterAPI.uploadVocalSheet(
@@ -1686,10 +2056,8 @@ class App {
 
   /**
    * Checks if a song product is available to be downloaded
-   * @param {SongProduct} product 
-   * @returns {boolean} true if the product is available to be downloaded
    */
-  isProductAvailable(product) {
+  isProductAvailable(product: SongProduct): boolean {
     if (!product.exists) {
       console.debug("No product available for this song.");
       return false;
@@ -1717,11 +2085,12 @@ class App {
   run() {
     this.authFlow.init();
     this.authFlow.setAuthCompleteCallback((pendingImport) => {
+      console.debug(`Pending import after auth:`, pendingImport);
       this.continueImportAfterAuth(pendingImport);
     });
 
     // Listen for messages from popup
-    browserAPI.runtime.onMessage.addListener((request) => {
+    browser.runtime.onMessage.addListener((request: any) => {
       if (request.action === "import_song") {
         this.importSongToPlanningCenter();
       }

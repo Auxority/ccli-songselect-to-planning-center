@@ -1,26 +1,20 @@
-import { rm, mkdir, cp } from "fs/promises";
-import { join } from "path";
+import { rm, mkdir } from "fs/promises";
 import { createWriteStream } from "fs";
+import { exec } from "child_process";
+import { promisify } from "util";
 import archiver from "archiver";
 
+const execAsync = promisify(exec);
 const BROWSERS = ["chrome", "firefox"];
 
 async function build(browser) {
   const distPath = `dist/${browser}`;
-  const manifestPath = getManifestPath(browser);
+  console.log(`🔨 Building ${browser} extension...`);
 
-  await rm(distPath, { recursive: true, force: true });
-  await mkdir(distPath, { recursive: true });
-
-  // Copy source files
-  await cp("src", distPath, { recursive: true });
-
-  // Copy icons
-  await cp("icons", join(distPath, "icons"), { recursive: true });
-
-  // Copy correct manifest
-  await cp(manifestPath, join(distPath, "manifest.json"));
-
+  // Build with webpack using browser-specific config
+  console.log("📦 Compiling and bundling...");
+  await execAsync(`npx webpack --mode=production --env browser=${browser}`);
+  
   // Create ZIP file
   await createZip(distPath, `dist/${browser}-extension.zip`);
   console.log(`✓ Built ${browser} extension and created ZIP`);
@@ -29,10 +23,10 @@ async function build(browser) {
 async function createZip(sourceDir, outputPath) {
   return new Promise((resolve, reject) => {
     const output = createWriteStream(outputPath);
-    const archive = archiver('zip', { zlib: { level: 9 } });
+    const archive = archiver("zip", { zlib: { level: 9 } });
 
-    output.on('close', () => resolve());
-    archive.on('error', (err) => reject(err));
+    output.on("close", () => resolve());
+    archive.on("error", (err) => reject(err));
 
     archive.pipe(output);
     archive.directory(sourceDir, false);
@@ -40,8 +34,11 @@ async function createZip(sourceDir, outputPath) {
   });
 }
 
-const getManifestPath = (browser) => browser === "chrome" ? "manifests/manifest.v3.json" : "manifests/manifest.v2.json";
+// Clean and prepare dist directory
+await rm("dist", { recursive: true, force: true });
+await mkdir("dist", { recursive: true });
 
+// Build extensions sequentially or in parallel
 await Promise.all(BROWSERS.map(build));
 
 console.log("🎉 All extensions built and zipped successfully!");
