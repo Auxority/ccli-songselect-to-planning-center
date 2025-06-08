@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>CCLI to Planning Center</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <h1>CCLI to Planning Center</h1>
+
+    <div id="status" class="status disconnected">
+      <span id="status-text">🔐 Will connect when importing</span>
+    </div>
+
+    <div id="message-container" class="message-container"></div>
+
+    <button id="import-btn" class="btn btn-primary">Import Current Song</button>
+
+    <div class="instructions">
+      <p><strong>How to use:</strong></p>
+      <ol>
+        <li>Navigate to a song on CCLI SongSelect</li>
+        <li>Click "Import Current Song"</li>
+        <li>Login to Planning Center if prompted</li>
+      </ol>
+      <p>
+        The extension will automatically handle authentication and import the
+        chord chart, lyrics, and available sheet music.
+      </p>
+    </div>
+
+    <script src="popup.js" defer></script>
+  </body>
+</html>

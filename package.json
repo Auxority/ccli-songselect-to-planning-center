@@ -1,0 +1,33 @@
+{
+  "name": "ccli-chordpro-to-planning-center",
+  "version": "1.0.0",
+  "description": "*Note that this userscript **requires** an active PlanningCenter and CCLI SongSelect subscription.*",
+  "homepage": "https://github.com/Auxority/ccli-songselect-to-planning-center#readme",
+  "bugs": {
+    "url": "https://github.com/Auxority/ccli-songselect-to-planning-center/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Auxority/ccli-songselect-to-planning-center.git"
+  },
+  "license": "MIT",
+  "author": "",
+  "type": "module",
+  "main": "scripts/build.js",
+  "scripts": {
+    "build": "node scripts/build.js"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.326",
+    "@types/webextension-polyfill": "^0.12.3",
+    "archiver": "^7.0.1",
+    "copy-webpack-plugin": "^13.0.0",
+    "ts-loader": "^9.5.2",
+    "typescript": "^5.8.3",
+    "webpack": "^5.99.9",
+    "webpack-cli": "^6.0.1"
+  },
+  "dependencies": {
+    "webextension-polyfill": "^0.12.0"
+  }
+}
