@@ -19,12 +19,16 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       if (isConnected(accessToken, expiresAt)) {
         if (statusDiv && statusText) {
-          statusDiv.className = "status connected";
+          statusDiv.classList.add("connected");
+          statusDiv.classList.remove("disconnected");
+          statusDiv.classList.add("status");
           statusText.textContent = "✅ Connected to Planning Center";
         }
       } else {
         if (statusDiv && statusText) {
-          statusDiv.className = "status disconnected";
+          statusDiv.classList.add("disconnected");
+          statusDiv.classList.remove("connected");
+          statusDiv.classList.add("status");
           statusText.textContent = "🔐 Will connect when importing";
         }
       }
