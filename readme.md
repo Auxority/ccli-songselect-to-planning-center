@@ -2,12 +2,12 @@
 
 *Note that this userscript **requires** an active PlanningCenter and CCLI SongSelect subscription.*
 
-## Usage (Old)
+## Usage
 
-*Note that this might not work in Google Chrome due to Manifest V3*
-
-1. Install the [Violentmonkey](https://violentmonkey.github.io/get-it/) extension.
-2. Install the [userscript](https://github.com/Auxority/ccli-chordpro-to-planning-center/raw/refs/heads/main/index.user.js)
+1. Install the browser extension (CCLI SongSelect to Planning Center) [here](https://addons.mozilla.org/en-US/firefox/)
+2. Navigate to a SongSelect song page
+3. Click on the extension icon and select "Import current song"
+4. Follow the steps provided to you by the browser extension.
 
 ## The problem
 
