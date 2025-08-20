@@ -1,6 +1,8 @@
 # CCLI SongSelect to Planning Center integration
 
-*Note that this userscript **requires** an active PlanningCenter and CCLI SongSelect subscription.*
+A browser extension to simplify the process of importing songs from CCLI SongSelect to Planning Center, including ChordPro, lead sheets, and vocal sheets.
+
+*Note that this browser extension **requires** an active PlanningCenter and CCLI SongSelect subscription.*
 
 ## Usage
 
