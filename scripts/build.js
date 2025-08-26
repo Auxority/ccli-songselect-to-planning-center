@@ -34,11 +34,33 @@ async function createZip(sourceDir, outputPath) {
   });
 }
 
+async function createSourceBundle(outputDir, zipPath) {
+  console.log("✍️ Preparing source bundle");
+  await mkdir(outputDir, { recursive: true });
+
+  const tmpTar = `${outputDir}.tar`;
+
+  await execAsync(`git archive --format=tar -o ${tmpTar} HEAD`);
+  await execAsync(`tar -xf ${tmpTar} -C ${outputDir}`);
+
+  if (zipPath) {
+    await createZip(outputDir, zipPath);
+  }
+
+  await rm(tmpTar, { force: true });
+  await rm("dist/source", { recursive: true, force: true });
+
+  console.log(`✓ Source bundle ZIP created at ${zipPath}`);
+}
+
 // Clean and prepare dist directory
 await rm("dist", { recursive: true, force: true });
 await mkdir("dist", { recursive: true });
 
-// Build extensions sequentially or in parallel
+// Build extensions
 await Promise.all(BROWSERS.map(build));
+
+// Create a clean source bundle for Firefox submission
+await createSourceBundle("dist/source", "dist/source.zip");
 
 console.log("🎉 All extensions built and zipped successfully!");
