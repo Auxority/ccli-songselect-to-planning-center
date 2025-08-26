@@ -174,7 +174,8 @@ class SongFinder {
 
 class ChordProResponse {
   static SECTION_DELIMITER_PATTERN = /\r?\n\r?\n/;
-  static SECTION_DELIMITER = "\n\n";
+  static UNIX_SECTION_DELIMITER = "\n\n";
+  static UNIX_LINE_ENDING = "\n";
   rawText: string;
 
   constructor(rawText: string) {
@@ -189,12 +190,12 @@ class ChordProResponse {
 
     // Remove copyright from the sections (PlanningCenter includes these)
     const modifiedSections = sections.slice(1, -1);
-    const songText = modifiedSections.join(ChordProResponse.SECTION_DELIMITER);
+    const songText = modifiedSections.join(ChordProResponse.UNIX_SECTION_DELIMITER);
 
-    // Converts section headers to PlanningCenter"s format
+    // Converts section headers to PlanningCenter's format (uppercased)
     const formattedComments = songText.replace(
       /\{comment: (.*?)\}/g,
-      "<b>$1</b>\n"
+      (_, text) => text.toUpperCase()
     );
 
     // Ensure spacing between adjacent chord brackets
@@ -202,8 +203,11 @@ class ChordProResponse {
       .replaceAll("][", "] [")
       .replaceAll("](", "] (");
 
+    // Ensure all line separators are consistent
+    const consistentLineEndings = consistentSpacing.replace(/\r\n?/g, ChordProResponse.UNIX_LINE_ENDING);
+
     // Remove any redundant whitespace from the beginning or end of the chords
-    return consistentSpacing.trim();
+    return consistentLineEndings.trim();
   }
 }
 
