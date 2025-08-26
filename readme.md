@@ -21,10 +21,9 @@ This project aims to automate the 24-step process through a userscript.
 
 ## TODO:
 
-1. Use proper Planning Center segments by adding all the song tags (like VERSE and CHORUS) in full caps without HTML bold tags.
-2. Check if a song exists within the archived songs in Planning Center (to prevent issues when adding the song)
-3. Extract the tempo/bpm from the chords page or lead sheet page (through the CCLI API).
-4. Support importing songs without ChordPro
+1. Check if a song exists within the archived songs in Planning Center (to prevent issues when adding the song)
+2. Extract the tempo/bpm from the chords page or lead sheet page (through the CCLI API).
+3. Support importing songs without ChordPro
 
 ## Development guide
 
