@@ -6,7 +6,9 @@ A browser extension to simplify the process of importing songs from CCLI SongSel
 
 ## Usage
 
-1. Install the browser extension (CCLI SongSelect to Planning Center) [here](https://addons.mozilla.org/en-US/firefox/addon/songselect-to-planning-center/)
+1. Install the browser extension
+- For [Firefox](https://addons.mozilla.org/en-US/firefox/addon/songselect-to-planning-center/)
+- For [Chrome](https://chromewebstore.google.com/detail/ccli-songselect-to-planni/flajcckkgnpmjcpobjekhdjlkalgkipf)
 2. Navigate to a SongSelect song page
 3. Click on the extension icon and select "Import current song"
 4. Follow the steps provided to you by the browser extension.
