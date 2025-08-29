@@ -27,9 +27,12 @@ This project aims to automate the 24-step process through a userscript.
 2. Filter out duplicate empty lines from ChordPro.
 3. Filter out (To Chorus) and other references from ChordPro.
 4. Add missing square brackets to chords.
-5. Check if a song exists within the archived songs in Planning Center (to prevent issues when adding the song)
-6. Extract the tempo/bpm from the chords page or lead sheet page (through the CCLI API).
-7. Support importing songs without ChordPro
+5. Detect songs without section headers, add a `GENERAL` section header to such songs.
+6. Detect section headers without `FULL UPPERCASING` and make them uppercase.
+7. Detect section headers and ensure all of them are unique (auto increment with numbers starting from 1).
+8. Check if a song exists within the archived songs in Planning Center (to prevent issues when adding the song)
+9. Extract the tempo/bpm from the chords page or lead sheet page (through the CCLI API).
+10. Support importing songs without ChordPro
 
 ## Development guide
 
