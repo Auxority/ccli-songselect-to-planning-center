@@ -23,9 +23,13 @@ This project aims to automate the 24-step process through a userscript.
 
 ## TODO:
 
-1. Check if a song exists within the archived songs in Planning Center (to prevent issues when adding the song)
-2. Extract the tempo/bpm from the chords page or lead sheet page (through the CCLI API).
-3. Support importing songs without ChordPro
+1. Filter out (x2), (x3), (x4) and (2x), x2, 2x, etc. from ChordPro.
+2. Filter out duplicate empty lines from ChordPro.
+3. Filter out (To Chorus) and other references from ChordPro.
+4. Add missing square brackets to chords.
+5. Check if a song exists within the archived songs in Planning Center (to prevent issues when adding the song)
+6. Extract the tempo/bpm from the chords page or lead sheet page (through the CCLI API).
+7. Support importing songs without ChordPro
 
 ## Development guide
 
